@@ -119,10 +119,33 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - mik60proios (the UniXNU campaign repo) stays as the socrates hardware-fact archive and
   tool source; nothing there is modified by this campaign.
 
+### 2026-11-06 — IPSW landed; socrates parameterization done (M1/M3 constants)
+- IPSW (iPhone10,3/iPhone10,6 16.7.16 20H392, 5.75 GB) downloaded by the user into
+  research/ipsw/; `DeviceTree.d22ap.im4p` extracted and unwrapped with `tools/adt.py`
+  (pure python + lzfse, no blacktop ipsw CLI needed) -> research/ipsw-x/d22ap.adt
+  (186 KB, target-type D22 — the identity donor is sound).
+- socrates constants landed in three files:
+  - shim/console.h: FB_BASE 0xb8000000, 1440x3200 (stride auto).
+  - shim/shim.c: IMEM_RESTART_REASON 0x146aa65c (imem@146aa000 restart_reason@65c — the
+    offset survives, the base moved), GICD 0x17100000 / GICR 0x17180000 / size 0x200000 /
+    **PE stride 0x40000** (SM8250 was 0x20000 — the socrates DTB says 0x40000), PSHOLD kept
+    0x0c264000 (stable across SoCs, socrates-unverified), VTIMER 27 unchanged.
+  - tools/mkadt.py: dram 0x880000000+256 MiB (the campaign-proven clean window — see the
+    comment; grow from M1's ABL memory dump, never by guessing), GIC as above (ADT reg
+    0x16100000/0x16180000 verified in the dump), FB 0xb8000000+0x2b00000, panel 1440x3200,
+    UFS 0x1d84000 (same address as apollo), TIMEBASE 19200000 unchanged, board compatible
+    xiaomi,socrates|qcom,sm8550, CPUs qcom,kryo with SM8550-AB clocks (2.02/2.8/3.19 GHz).
+- `tools/mkadt.py shim/out/socrates.adt --dump` builds a verified 12.9 KB ADT: dram-base
+  0x880000000, iPhone10,3/D22 identity from the donor, gic regs correct.
+- NOT done: the shim itself is not yet compiled (needs aarch64-linux-gnu-gcc: WSL apt or a
+  Mac clang/ld.lld adaptation of shim/build.sh) and the kernel build path is undecided
+  (GitHub Actions like apollo — needs this repo pushed — vs local Xcode 15.4).
+
 ### Next concrete actions
-1. (user) Download the iPhone X IPSW into research/ipsw/.
-2. (agent) Parameterize the socrates constants in shim + mkadt.py; check the QEMU path
-   (`tools/qemu-sweet.py` with socrates GIC/timer values) — the kernel series can be smoke-
-   built against QEMU before the user flashes anything.
+1. (decision) Kernel build: create the GitHub repo + push + run apollo's xnu.yml CI
+   (free on public repos), or install Xcode 15.4 locally.
+2. (agent) Shim build toolchain: WSL gcc-aarch64-linux-gnu or Mac clang+lld; then the M1
+   boot image (the socrates twist: the 8-block vendor DTB table + per-block splash
+   injection — mik60proios/tools/inject-nodes-mac.sh is the working reference).
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) — needs the
    phone at hand; nothing destructive.

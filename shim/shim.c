@@ -12,15 +12,16 @@
 #include "loader.h"
 #include "ufs.h"
 
-/* apollo (SM8250) values from live.dts / iomem */
-#define IMEM_RESTART_REASON  0x146bf65cUL    /* qcom,msm-imem restart_reason@65c */
+/* socrates (K60 Pro, SM8550) values from the vendor DTB table (dtb_00, Kalama QCM);
+ * the mik60proios UniXNU campaign hardware-proved the splash and memory facts. */
+#define IMEM_RESTART_REASON  0x146aa65cUL    /* qcom,msm-imem@146aa000 restart_reason@65c */
 #define RESTART_BOOTLOADER   0x77665500U
-#define PSHOLD               0x0c264000UL
+#define PSHOLD               0x0c264000UL    /* stable across SM845/8250/8550; socrates-unverified */
 
-#define GICD_BASE            0x17a00000
-#define GICR_BASE            0x17a60000
-#define GICR_SIZE            0x100000
-#define GICR_PE_SIZE         0x20000
+#define GICD_BASE            0x17100000      /* intc@17100000: SM8550 moved it (SM8250 was 0x17a00000) */
+#define GICR_BASE            0x17180000
+#define GICR_SIZE            0x200000
+#define GICR_PE_SIZE         0x40000         /* DT: redistributor-stride 0x40000 (SM8250 was 0x20000) */
 #define GICR_TYPER           0x08
 #define GICR_WAKER           0x14
 #define GICR_SGI             0x10000

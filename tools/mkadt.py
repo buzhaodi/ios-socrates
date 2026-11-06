@@ -46,33 +46,37 @@ import hashlib, os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adt  # noqa: E402
 
-# Kernel-managed RAM: above every Qualcomm XPU carve-out (see NOTES.md)
-PHYS_BASE = 0xb0000000
-MEM_SIZE = 0x4d000000
+# Kernel-managed RAM: the DRAM window at 0x880000000 - the "DRAM bank 1" window
+# the mik60proios UniXNU campaign ran XNU from for ten days ("the one
+# conventional run with no unknown gaps inside"). The low bank (0x80000000+2G)
+# contains the c7cc0000 gap, the XPU-protected holes and the splash region;
+# grow the region from M1's ABL memory dump, not by guessing here.
+PHYS_BASE = 0x880000000
+MEM_SIZE = 0x10000000
 # Panic log buffer, carved from the TOP of the dram range and exposed to XNU as
 # /pram + /chosen/embedded-panic-log-size. Without it, pe_init.c's
 # check_for_panic_log() leaves gPanicBase == 0, debug_log_init() bails out twice
 # and the kernel hangs right after "kdp_core zlib memory" — reproduced on QEMU
 # and independently on ios-fajita.
 PANIC_LOG_SIZE = 0x100000
-# --highmem (phone only): the whole upper DDR bank. The live FDT memory node is
-# <0x80000000 2G>, <0x1_00000000 0xfcc00000>; every fixed reserved-memory
-# carve-out is in the low bank and the dynamic pools are limited below 4G.
-HIGH_PHYS_BASE = 0x100000000
-# apollo: 4 GiB from 0x1_00000000 (sweet used 0xfcc00000); not yet checked
-# against apollo's /memory node
-HIGH_MEM_SIZE = 0x100000000
+# --highmem (phone only): socrates - DO NOT pass --highmem until M1 dumps the
+# real size of the 0x880000000 bank; the values below are placeholders.
+HIGH_PHYS_BASE = 0x890000000
+HIGH_MEM_SIZE = 0x10000000
 # /arm-io children are relative to this; it must not be 0 (serial_init bails)
 SOC_BASE = 0x01000000
 
-GICD, GICD_SIZE = 0x17a00000, 0x10000
-GICR, GICR_SIZE = 0x17a60000, 0x100000
-# cont_splash_region@9c000000 from live.dts = 0x2300000
-FB, FB_SIZE = 0x9c000000, 0x2300000
+# socrates (SM8550, Kalama QCM dtb): the GIC moved (SM8250 was 0x17a00000)
+GICD, GICD_SIZE = 0x17100000, 0x10000
+GICR, GICR_SIZE = 0x17180000, 0x200000
+# cont_splash_region 0xb8000000+0x2b00000 (the stock uefiplat "Display
+# Reserved" window; the mik60proios splash-injection tools use the same)
+FB, FB_SIZE = 0xb8000000, 0x2b00000
 SWEET_ECID = 0x5357454554000001  # 'SWEET' + 1, synthetic
-# Mi 10T 5G 1080x2400, a8r8g8b8
-FB_W, FB_H, FB_STRIDE = 1080, 2400, 1080 * 4
-# Internal UFS host (ufshc@1d84000 "ufs_mem"); QEMU virt has none
+# Redmi K60 Pro 1440x3200, a8r8g8b8
+FB_W, FB_H, FB_STRIDE = 1440, 3200, 1440 * 4
+# Internal UFS host (ufshc@1d84000 "ufs_mem" - same address as SM8250/SDM845;
+# SM8550 adds ICE 0x1d88000 + ICE_HWKM 0x1d90000, mapped when M2 needs them)
 UFS, UFS_SIZE = 0x01d84000, 0x3000
 TIMEBASE = 19200000
 VTIMER_INTID = 27
@@ -199,7 +203,7 @@ def build(seed=None, qemu=False, highmem=False, touch_fw=None, gmu_fw=None, gpu_
         cpu_nodes.append(node(f'cpu{core}', [
             ph(),
             ('device_type', cstr('cpu')),
-            ('compatible', cstr('qcom,kryo470') + cstr('ARM,v8')),
+            ('compatible', cstr('qcom,kryo') + cstr('ARM,v8')),
             ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
             ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
             ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology
@@ -210,7 +214,8 @@ def build(seed=None, qemu=False, highmem=False, touch_fw=None, gmu_fw=None, gpu_
             ('l3-cache-id', u32(0)),     # shared L3
             ('state', cstr('running' if core == 0 else 'stopped')),
             ('timebase-frequency', u32(timebase)),
-            ('clock-frequency', u32(2304000000 if core >= 6 else 1804800000)),
+            # SM8550-AB: silver 0-3 2.02 GHz, gold 4-6 2.8 GHz, prime 7 3.19 GHz
+            ('clock-frequency', u32(3192000000 if core == 7 else 2800000000 if core >= 4 else 2020000000)),
             ('bus-frequency', u32(100000000)),
             ('memory-frequency', u32(1866000000)),
             ('peripheral-frequency', u32(timebase)),
@@ -326,7 +331,7 @@ def build(seed=None, qemu=False, highmem=False, touch_fw=None, gmu_fw=None, gpu_
     # only that string (patch 0016). Keep apollo/sm8250 for identification.
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,sweet') + cstr('xiaomi,apollo') + cstr('qcom,sm8250') + cstr('AppleARM')),
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,socrates') + cstr('qcom,sm8550') + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),
