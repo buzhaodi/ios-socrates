@@ -329,7 +329,25 @@ void test_ufs(void)
 		con_hex2("UFS MODE", "->legacy=", ufs_rd(0x300), "was=", mem_cfg);
 	}
 
-		/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
+	
+	/* Take over the transfer request list: stop, point at ours, run. */
+	ufs_wr(REG_UTRLRSR, 0);
+	uintptr_t list = (uintptr_t)utrl;
+	ufs_wr(REG_UTRLBA, (uint32_t)list);
+	ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
+	ufs_wr(REG_UTRLRSR, 1);
+	con_hex2("UFS", "ours=", (uint32_t)list, "rsr=", ufs_rd(REG_UTRLRSR));
+	/*
+	 * Never ring a doorbell unless the host really uses our list: otherwise
+	 * it would execute whatever ABL left in its own slot 0 (maybe a write).
+	 */
+	if (ufs_rd(REG_UTRLBA) != (uint32_t)list || ufs_rd(REG_UTRLBAU) != (uint32_t)(list >> 32) ||
+	    !(ufs_rd(REG_UTRLRSR) & 1)) {
+		con_str("UFS", "list base not taken: stop");
+		return;
+	}
+
+	/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
 	 * the host sets the DeviceInit flag (SET_FLAG query, idn 0x01) and the
 	 * device clears it when its bring-up is done - ufshcd's
 	 * ufshcd_dev_link_startup does this exact dance. Our first-flash NOP
@@ -348,23 +366,6 @@ void test_ufs(void)
 		}
 		con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
 		dump_response("UFS DEVINI");
-	}
-
-	/* Take over the transfer request list: stop, point at ours, run. */
-	ufs_wr(REG_UTRLRSR, 0);
-	uintptr_t list = (uintptr_t)utrl;
-	ufs_wr(REG_UTRLBA, (uint32_t)list);
-	ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
-	ufs_wr(REG_UTRLRSR, 1);
-	con_hex2("UFS", "ours=", (uint32_t)list, "rsr=", ufs_rd(REG_UTRLRSR));
-	/*
-	 * Never ring a doorbell unless the host really uses our list: otherwise
-	 * it would execute whatever ABL left in its own slot 0 (maybe a write).
-	 */
-	if (ufs_rd(REG_UTRLBA) != (uint32_t)list || ufs_rd(REG_UTRLBAU) != (uint32_t)(list >> 32) ||
-	    !(ufs_rd(REG_UTRLRSR) & 1)) {
-		con_str("UFS", "list base not taken: stop");
-		return;
 	}
 
 	con_hex2("UFS NOP", "rc=", nop_upiu(), "resp0=", ucd.resp[0]);
