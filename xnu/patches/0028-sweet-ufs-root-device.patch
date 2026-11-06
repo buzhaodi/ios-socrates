@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,729 @@
+@@ -0,0 +1,737 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -332,8 +332,8 @@ new file mode 100644
 + * here: the live link the bootloader (or our shim) leaves behind does NOT
 + * survive into the kernel - by the time bsd_init probes, HCS has lost DP and
 + * UTRLRDY (hce 0x1, hcs UCRDY-only, flash #2 photo 2026-11-06). Rebuild the
-+ * link ourselves: MCQ->legacy, HCE reset, DME_POWERON, DME_LINK_STARTUP,
-+ * then the transfer list + bDeviceInit happen in the normal path below.
++ * link ourselves: MCQ->legacy, HCE reset, DME_LINK_STARTUP (DME_POWERON only
++ * as the cold fallback), then the transfer list + bDeviceInit in the normal path.
 + */
 +static int
 +ufs_wake_host(void)
@@ -363,9 +363,17 @@ new file mode 100644
 +		    ufs_rd(REG_HCE), ufs_rd(REG_HCS));
 +		return ENXIO;
 +	}
-+	int error = ufs_uic_cmd(0x10);           /* DME_POWERON */
-+	if (error == 0) {
-+		error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
++	/* LINK_STARTUP first (the warm path): flash #4 (2026-11-07) proved the
++	 * boot's second wake hits a device that is ALREADY powered, and
++	 * DME_POWERON to a live device is rejected (is 0x404, err 0x80000001 -
++	 * the physical-adapter error ufshcd avoids by never sending POWERON to
++	 * a live device). If startup fails, the device may be down (the ABL's
++	 * handoff state / the M2 first-wake scenario): POWERON, then retry. */
++	int error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
++	if (error) {
++		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON, the cold fallback */
++			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
++		}
 +	}
 +	if (error) {
 +		printf("SWEET UFS: wake: UIC 0x%x (is 0x%x err 0x%x)\n",
