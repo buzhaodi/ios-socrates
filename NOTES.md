@@ -2,25 +2,21 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 00:10): kernel-side UFS wake BUILT (CI 42245344012 green, kernel sha 78765a9e…); flash #3 image 02cde07a… ready — the M4 probe now wakes the link itself <<<
+### >>> SOCRATES (2026-11-07 00:50): flash #3 verdict — the wake RAN, failed on warm-reset DP semantics; fixed (kernel c02099eb…, CI 42250759235 green); flash #4 image 8405b864… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- CI workflow note: build.sh applies patches with git apply (STRICT). validate-repo uses GNU
-  patch -f (fuzz) - a mismatch that hid a context break (fixed; the wake block now sits
-  before ufs_take_over_host). Kernel artifact needs auth: gh is installed + logged in
-  (buzhaodi); downloads go through the user's proxy 127.0.0.1:10808.
-- Flash #2 result (photo-decoded): kryo470 fix WORKED - bsd_init ran (Skywalk POST all
-  PASS) and the UFS probe executed for the first time: 'host not ready (hce 0x1 hcs
-  0x?)' -> the shim-built link does not survive to kernel probe time.
-- Fix: the 19-round M2 wake recipe now ALSO lives in the kernel (xnu 0028: ufs_wake_host
-  + ufs_query + ufs_dev_init; wakes on the not-ready gate, sets/polls fDeviceInit after).
-  CI 42245344012 green; strings verified in the binary.
-- NEW flash image: shim/out-mac/xnu-boot.img sha 02cde07a… (shim wake + kernel wake +
-  rd=ufsroot0 + kryo470 x8, all verified inside the image).
-- NEXT: (user) flash #3 same drill; expect 'waking -> link re-established -> userdata on
-  LUN 0 -> BSD root: ufsroot0 -> mountroot panic' = M4 probe success. Then M0 backups,
-  then the iOS root into userdata (destructive; explicit confirmation required).
+- Flash #3 photo-decoded: the kernel-side wake executed for the first time and diagnosed
+  its own failure: 'host not ready ... waking' -> 'wake: HCE reset failed (hcs 0xB)'. On a
+  warm (second-of-boot) HCE reset DP does not rise alone - it returns only after
+  DME_POWERON + DME_LINK_STARTUP, which the old order never reached. Fix in xnu 0028
+  (commit a64aed8): HCE reset -> UCRDY gate -> UIC pair -> DP poll; failure lines print
+  hce+hcs. validate-repo + strict git-apply chain green.
+- Flash #4 image shim/out-mac/xnu-boot.img sha 8405b864… ready (verified inside:
+  warm-reset strings in the kernel, shim wake, rd=ufsroot0, kryo470 x8).
+- NEXT: (user) flash #4. Success = 'wake: link re-established' -> 'userdata on LUN 0' ->
+  mountroot panic. Then M0 backups, then the iOS root build into userdata (destructive;
+  explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

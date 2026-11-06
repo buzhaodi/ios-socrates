@@ -373,11 +373,35 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
      'BSD root: ufsroot0' -> mountroot panic (userdata is f2fs) = M4 PROBE SUCCESS.
   3. If the kernel wake fails at a stage, its line names the stage exactly.
 
+### 2026-11-07 — flash #3 verdict: the kernel wake RAN and named its failure; warm-reset fix built (flash #4 image 8405b864…)
+
+- Flash #3 (02cde07a, 3-photo OCR): bsd_init -> Skywalk POST all PASS -> probe:
+  'SWEET UFS: host not ready (hce 0x1 hcs 0x?), waking' ->
+  'SWEET UFS: wake: HCE reset failed (hcs 0xB)'. The wake code executed, diagnosed
+  itself, and the failure is a SEQUENCE error, not a hardware wall: on this boot's
+  SECOND HCE reset (the shim already ran the full recipe pre-XNU and left the device
+  mid-session), DP does NOT rise by itself after HCE=1 - it only returns with the
+  UniPro link, i.e. AFTER DME_POWERON + DME_LINK_STARTUP. The original code polled DP
+  BEFORE the UIC pair: a deadlock on warm reset. (The shim's first wake worked because
+  the ABL's dead state is a different path: DP rises after HCE=1 there - M2 v18/v19.)
+- Fix (commit a64aed8, CI 42250759235 green, kernel c02099eb…): ufs_wake_host now runs
+  HCE reset -> UCRDY gate ((1u << 3) inline; a define would break 0034's hunk context
+  again) -> DME_POWERON -> DME_LINK_STARTUP -> DP poll (1 s) -> the existing
+  fDeviceInit/list path. Failure lines print hce alongside hcs.
+- Flash #4 image shim/out-mac/xnu-boot.img sha 8405b864… (shim wake + warm-reset kernel
+  wake + rd=ufsroot0 + kryo470 x8, verified inside).
+- flash #4 expected panel: 'waking' -> 'wake: link re-established (hcs 0xB)' ->
+  fDeviceInit set/poll -> TUR -> 'SWEET UFS: "userdata" on LUN 0: first block 0x…,
+  N MiB, read-only' -> 'BSD root: ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
+  Fallback diagnostics if not: 'controller not up (hce .. hcs ..)' = UCRDY never came
+  (HCE write stuck / clock state); 'UIC 0x.. (is .. err ..)' = the UIC pair refused -
+  then try hibernate-exit or skipping POWERON on warm reset; 'no device present after
+  link startup' = link up but device silent.
+
 ### Next concrete actions
-1. (user) M4 probe flash #3, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 02cde07a…): same drill (Android boot once, unlock, ~30 s, fastboot boot, photo).
-   Watch for the 'waking' + 'link re-established' + 'userdata on LUN 0' lines; the
-   mountroot panic after them is the SUCCESS signal.
+1. (user) M4 probe flash #4, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 8405b864…): same drill. Success = 'wake: link re-established' + 'userdata on
+   LUN 0' + mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
