@@ -249,6 +249,7 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	zero(&utrl[0], sizeof(utrl[0]));
 	zero(&ucd, sizeof(ucd));
 	ucd.cmd[0] = 0x16;			/* QUERY REQUEST */
+	ucd.cmd[2] = 0xd0;			/* the UFS DEVICE W-LUN (ufshcd's target) */
 	ucd.cmd[3] = ++tag;
 	ucd.cmd[4] = qfunc;
 	ucd.cmd[12] = opcode;
@@ -349,6 +350,15 @@ void test_ufs(void)
 	dump_response("UFS NOP");
 
 	uint32_t ocs = 0, st = 0, rc;
+	/* The v6 TUR sense: key 2 (NOT READY), ASC/ASCQ 04/02 "LOGICAL UNIT NOT
+	 * READY - INITIALIZING COMMAND REQUIRED" (SPC-5). The initializing
+	 * command is START STOP UNIT: opcode 0x1b, START bit = byte 4 bit 0. */
+	static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 1, 0 };
+	rc = scsi(0, ssu, sizeof(ssu), 0, 0, &ocs, &st);
+	con_hex2("UFS SSU", "rc=", rc, "ocs/st=", ocs << 8 | st);
+	if (rc == 4)
+		dump_response("UFS SSU");
+
 	static const uint8_t tur[6] = { 0x00 };
 	/* A first command may report a unit attention; retry a few times. */
 	for (int i = 0; i < 3; i++) {
