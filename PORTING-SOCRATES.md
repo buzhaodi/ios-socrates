@@ -308,6 +308,15 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   - if the link does not survive the handoff: `SWEET UFS: host not ready (hce .. hcs ..)`
     then panic `SWEET UFS root ufsroot0 unavailable: 5` = the kernel-side fallback (port
     the recipe into the kernel) becomes the next step.
+- QEMU smoke of the M4 probe (payload-qemu, rd=ufsroot0, 30/120/300 s): the kernel boots
+  to the full SWEET driver set + heartbeat, then WEDGES in the kext-free IOKit quiet
+  phase BEFORE IOFindBSDRoot - same screen (600-vsync counters frozen) at every
+  duration, panic log empty, CPU taking timer IRQs. The M3 60 s run showed the same
+  screen, so the wedge predates rd=ufsroot0 (cmdline-independent, QEMU-only so far:
+  the phone's M3 photo proves these stages pass on real hardware). QEMU therefore
+  CANNOT smoke-test the UFS root path - the flash is the probe's first real exercise.
+  (The qemu-m3-ctrl control run panicked at the known fb site because it accidentally
+  used the OLD apollofb payload - not comparable, discarded.)
 - Repo: remotes consolidated to a single origin -> github.com/buzhaodi/ios-socrates
   (user 2026-11-06: all changes and the CI builds live there; the old apollo/ios-sweet
   remotes removed). README status table updated: M3 done on hardware, M4 in progress.
