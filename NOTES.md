@@ -2,6 +2,20 @@
 
 ## Agent handoff / active work
 
+### >>> SOCRATES (2026-11-06 ~20:00, after the first M3 flash photo): flashed image was a stale-shim hybrid; REAL fixed image built (cfc40eb2…), re-flash pending <<<
+
+- This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
+  Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
+- First M3 flash panicked at the QEMU-known site (`pmap_map_bd`, same caller 0xfffffe0007baf060):
+  `out-mac/xnu-boot.img` packed the PRE-fix shim (Image.gz built 17:08, v_height=3200 baked in)
+  with the POST-fix payload. QEMU never sees the shim loader (qemu-sweet builds boot_args in
+  python), so run6's green was real but didn't cover the loader half.
+- Rebuilt everything; verified inside the final image (disassembly + ADT bytes). NEW flash image:
+  `~/gittest/ios-socrates/shim/out-mac/xnu-boot.img`, sha256 cfc40eb205c4968062afacfd86ca912088f794fa0ba7fef16ad97844c28fdd92.
+  build-mac-xnu.sh now refuses stale shims/payloads (mtime gate, both directions tested).
+- NEXT: re-flash (Android boot once, unlock, ~30 s, `fastboot boot .../xnu-boot.img`,
+  photo the panel). Then M0 backups, then M4 (iOS root into userdata).
+
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
 - **Git/CI:** main = this branch (no divergence); branch `claude/wonderful-allen-3gaupe` fully merged into main by the other agent; `claude/blissful-hypatia-6ut4kn` is the old Bluetooth branch (Oct 30), its work (0144/0145) already in main -- stale, not merged again. Patch series 0001-0186 contiguous; validate-repo passes; machine_routines.c and sched_prim.c (not series-created) checked separately against xnu-8796.141.3. Last builds green: xnu 41844548555 (0184), metal2 41845122846 (Turnip 0102 + LTO plug-in).

@@ -223,12 +223,37 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   shim Image.gz + the SWEETXNU payload as the ramdisk (apollo's recipe) + the 8-block
   socrates DTB blob.
 
+### 2026-11-06 — first M3 flash: the SAME pmap_map_bd panic — the packed shim was STALE; rebuilt + gated
+- Panel photo (OCR): `initialize_screen: b=0xb8000000, w=0x5a0, h=0xc80, r=0x1680`, then
+  `panic(cpu 0, caller 0xfffffe0007baf060): pmap_map_bd @pmap.c:1885` + nested-panic stall —
+  the IDENTICAL site/VA as QEMU runs 1-3. First suspicion: the fix didn't work on hardware.
+  It didn't have to: the flashed image was a hybrid.
+- Forensics (all observations, not guesses):
+  - The flashed `xnu-boot.img` embedded the SAME `Image.gz` as `out-mac/` (byte-identical,
+    sha 03e2142c…), whose loader_boot disassembly stores `mov w10,#0xc80; str [x19,#0x48]`
+    — v_height=3200, the PRE-fix loader. Image.gz mtime 17:08 predates the loader.c fix 18:33.
+  - The payload half was NEW: photo `h=0xc80` = 18MB/5760 = 3200 rows proves the ADT fbcon
+    reg was the fixed visible window (QEMU run2's old 45MB ADT printed h=0x2000=8192 rows);
+    cmdline `sweetfb_probe=0` verified in the packed payload.
+  - So: 18MB fbcon (new) + v_height=3200 boot_args (old) = 18+3×15.6… still over the 32MB
+    early window -> the exact panic the fix was meant to kill. QEMU never caught it because
+    qemu-sweet.py builds boot_args in python and never executes the shim loader at all.
+- Fix: build-mac.sh re-run (shim now stores 0x400=1024, verified by disassembly),
+  build-mac-xnu.sh re-run. xnu-boot.img sha cfc40eb2… (was 35d415a4…). Verified INSIDE the
+  final image: embedded Image.gz == fresh build; `mov w10,#0x400; str x10,[x19,#0x48]`
+  present; the 0xc80 encoding absent; payload ADT fbcon reg = 0x1194000; cmdline gate intact.
+- Process fix: build-mac-xnu.sh now refuses to pack when out-mac/Image.gz is older than any
+  shim source, or the payload older than mkadt.py/mkpayload.py (tested both directions).
+
 ### Next concrete actions
-1. (user) M3 flash: full Android boot once, unlock, ~30 s, then
+1. (user) M3 flash #2, same image path (now the REAL fixed image, sha cfc40eb2…):
+   full Android boot once, unlock, ~30 s, then
    `fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img`; photograph the panel.
-   Expect: the shim's red LOADER lines, then XNU clears the screen and paints kernel text
-   (fbcon); the boot ends in a panic or hang at the UFS/root stage (no iOS root on the
-   phone yet - M4).
+   Expect: shim red LOADER lines, then XNU clears the screen and paints kernel text; the
+   boot then panics or hangs at the UFS/root stage (no iOS root yet — M4). If the panel
+   instead shows the SAME pmap panic again with h=0xc80, the phone is running something
+   other than this image — check `fastboot boot` actually re-downloaded (one boot per
+   bootloader session; `fastboot reboot bootloader` between attempts).
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
