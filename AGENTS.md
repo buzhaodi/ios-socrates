@@ -14,3 +14,10 @@
   recovery, modem, persist and the backups intact, and confirm each
   destructive step with the user before running it.
 - Keep device dumps, serial numbers and downloaded Apple artifacts out of git.
+
+## socrates port
+
+Read `PORTING-SOCRATES.md` (device facts, milestone plan, campaign log)
+before any socrates work; update its campaign log after each milestone, same
+as NOTES.md discipline. The mik60proios repo (~/gittest/mik60proios) is the
+hardware-fact archive for this board.

@@ -23,3 +23,9 @@ work/
 sweet-metal2/
 userland/metal2/metal2/out/
 userland/metal2/turnip/out/
+
+# socrates campaign: Apple artifacts, device dumps and firmware pulled from the
+# phone stay out of git (AGENTS.md rule); the IPSW lands in research/ipsw/.
+research/
+xnu/out/
+shim/out/
