@@ -22,7 +22,7 @@ for b, in ((k,), (r,)):
 sha.update(struct.pack("<I", 0))
 ident = sha.digest().ljust(32, b"\0")
 hdr = struct.pack("<8s10I16s512s32s1024s", b"ANDROID!",
-    len(k), a.base + 0x8000, len(r), a.base + 0x01000000, 0, a.base + 0x00f00000,
+    len(k), a.base + 0x8000, len(r), a.base + 0x01000000, 0, a.base + 0x01e00000,
     a.base + 0x100, PAGE, 0, 0x2004063c, b"", cmd.ljust(512, b"\0"), ident, b"")
 open(a.out, "wb").write(pad(hdr) + pad(k) + pad(r))
 print(f"{a.out}: kernel {len(k)} ramdisk {len(r)}")

@@ -61,7 +61,14 @@ arc = ent('TRAILER!!!') + b'\0' * 1024
 open('out-mac/ramdisk.bin', 'wb').write(gzip.compress(arc, 9, mtime=0))
 "
 
-python3 ../tools/mkbootimg_v0.py out-mac/Image out-mac/ramdisk.bin out-mac/shim-boot.img \
+# gzip the kernel: the K60 Pro's ABL accepts a raw Image with "OKAY" and then
+# refuses to run it (first M1 flash, 2026-11-06: fastboot OKAY, black panel, no
+# shim red screen). The mik60proios campaign's kernels were always
+# gzip(<arm64 image>) with the dtb appended after the gzip stream, and
+# beryllium hit the same wall on SDM845 ("a raw Image is accepted and then
+# refused"). The ARM64 header (image_size = the _end) rides inside the gzip.
+gzip -9nc out-mac/Image > out-mac/Image.gz
+python3 ../tools/mkbootimg_v0.py out-mac/Image.gz out-mac/ramdisk.bin out-mac/shim-boot.img \
   --dtb "$DTB" --cmdline "console=null"
 shasum -a 256 out-mac/shim-boot.img
 echo "DONE: shim/out-mac/shim-boot.img (M1 flash: fastboot boot, after one full Android boot)"
