@@ -235,17 +235,22 @@ static uint32_t nop_upiu(void)
 	return ucd.resp[0] == 0x20 ? 0 : 2;	/* NOP IN is 0x20 (0x22 is DATA IN) */
 }
 
-/* One QUERY UPIU (SET/READ FLAG): the QUERY REQUEST is type 0x04, the query
- * body after the 12-byte header holds opcode/idn/index/selector (struct
- * utp_upiu_query); the device answers a QUERY RESPONSE, type 0x26. Returns 0
- * if a 0x26 came back, 1 on doorbell timeout, 2 on a wrong response type. */
-static uint32_t upiu_query(uint8_t opcode, uint8_t idn)
+/* One QUERY UPIU. The UPIU transaction table per include/ufs/ufs.h (and the
+ * v5 lesson: 0x04 is TASK REQ, not QUERY - the device silently dropped our
+ * "queries" exactly as it should have): QUERY REQUEST = 0x16, QUERY
+ * RESPONSE = 0x36; the header's query_function byte [4] is
+ * UPIU_QUERY_FUNC_STANDARD_WRITE (0x81) for SET_FLAG and READ (0x01) for
+ * READ_FLAG; the query body after the 12-byte header holds opcode/idn.
+ * Returns 0 on a 0x36 with response code 0 (resp[12]), 1 on doorbell
+ * timeout, 2 on a wrong type, 3 on a nonzero query response code. */
+static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 {
 	static uint8_t tag;
 	zero(&utrl[0], sizeof(utrl[0]));
 	zero(&ucd, sizeof(ucd));
-	ucd.cmd[0] = 0x04;			/* QUERY REQUEST */
+	ucd.cmd[0] = 0x16;			/* QUERY REQUEST */
 	ucd.cmd[3] = ++tag;
+	ucd.cmd[4] = qfunc;
 	ucd.cmd[12] = opcode;
 	ucd.cmd[13] = idn;
 	uintptr_t ucd_pa = (uintptr_t)&ucd;
@@ -264,7 +269,9 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn)
 		}
 	}
 	__asm__ volatile("dsb sy" ::: "memory");
-	return ucd.resp[0] == 0x26 ? 0 : 2;
+	if (ucd.resp[0] != 0x36)
+		return 2;
+	return ucd.resp[12] ? 3 : 0;
 }
 
 void test_ufs(void)
@@ -306,16 +313,18 @@ void test_ufs(void)
 	 * ufshcd_dev_link_startup does this exact dance. Our first-flash NOP
 	 * passed while every SCSI command CHECK-CONDITIONed. */
 	{
-		uint32_t rc = upiu_query(0x06, 0x01);		/* SET_FLAG bDeviceInit */
+		uint32_t rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit (write) */
 		con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
 		dump_response("UFS DEVINI");
-		for (int i = 0; i < 20 && !rc; i++) {		/* device clears the flag when ready */
+		/* The device clears bDeviceInit when its bring-up is done; the flag
+		 * value comes back in the READ_FLAG response at [16]. */
+		for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
 			uint64_t t = ticks();			/* 50 ms at 19.2 MHz (delay_ms is shim.c's) */
 			while (ticks() - t < 960000)
 				;
-			rc = upiu_query(0x05, 0x01);		/* READ_FLAG bDeviceInit */
+			rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit (read) */
 		}
-		con_hex2("UFS DEVINI", "poll rc=", rc, "resp0=", ucd.resp[0]);
+		con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
 		dump_response("UFS DEVINI");
 	}
 
