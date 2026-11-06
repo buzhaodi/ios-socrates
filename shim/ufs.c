@@ -259,11 +259,11 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	ucd.cmd[12] = opcode;
 	ucd.cmd[13] = idn;
 	uintptr_t ucd_pa = (uintptr_t)&ucd;
-	/* The UTRD command type (include/ufs/ufshci.h): queries are
-	 * UTP_DEVICE_MANAGEMENT_FUNCTION = bit 29, not the NATIVE_UFS bit 28
-	 * (bit 28 is for NOPs - v8 sent queries as native commands and the
-	 * controller completed the slot without doing anything). */
-	utrl[0].dw0 = 0x20000000 | (1u << 24);	/* DEVICE MANAGEMENT + I */
+	/* Linux sends every UTRD - SCSI, NOP and query alike - with
+	 * command_type = UTP_CMD_TYPE_UFS_STORAGE (DW0 [31:28] = 1;
+	 * ufshcd_setup_dev_cmd never overrides prepare_req_desc_hdr's
+	 * default). v9's DEVICE_MANAGEMENT (2) drew silence too; back to 1. */
+	utrl[0].dw0 = (1u << 28) | (1u << 24);	/* UFS storage, no data */
 	utrl[0].dw2 = 0x0f;
 	utrl[0].ucdba = (uint32_t)ucd_pa;
 	utrl[0].ucdbau = (uint32_t)(ucd_pa >> 32);
@@ -278,6 +278,7 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 		}
 	}
 	__asm__ volatile("dsb sy" ::: "memory");
+	con_hex2("UFS Q", "ocs=", utrl[0].dw2 & 0xff, "is=", ufs_rd(REG_IS));
 	if (ucd.resp[0] != 0x36)
 		return 2;
 	return ucd.resp[12] ? 3 : 0;
