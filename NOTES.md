@@ -2,24 +2,22 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-06 ~21:00): M3 DONE ON HARDWARE — flash #2 GREEN (no panic, 60Hz vsync live on the panel); next = M4 probe image (rd=ufsroot0) <<<
+### >>> SOCRATES (2026-11-06 ~22:00): M3 CLOSED on hardware; M4 probe image BUILT and verified (sha 45323896…) — flash it; repo now pushes to buzhaodi/ios-socrates only <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- M3 CLOSED: flash #1 panicked at the QEMU-known pmap_map_bd site because the packed image
-  mixed the PRE-fix shim with the POST-fix payload (details + forensics in the campaign log).
-  Rebuilt + mtime-gated build-mac-xnu.sh (refuses stale shim/payload; commit 13df690),
-  out-mac/* untracked).
-- Flash #2 (sha cfc40eb2…): GREEN, photo-OCR decoded — Darwin banner to VM bootstrap, the
-  full SWEET driver set registered, `AppleCLCD 1440x1024 stride 5760 at 0xb8000000`, and
-  `600 vsyncs, 0 skipped, latest 1.8 ms late` = the 60 Hz display interrupt is LIVE on
-  real hardware (GICv3 + timer + DPU). M3 done on the phone, not just in QEMU.
-- NEXT (M4 probe): add `rd=ufsroot0` to the payload cmdline; the kernel UFS root driver
-  (xnu 0028, bsd/dev/sweet_ufs.c) reuses the bootloader's live link, so the SHIM must run
-  the M2 wake-up recipe before jumping to XNU. Partition by boot-arg ufsroot= (default
-  "userdata"), root device rd=ufsroot0, mkadt.py already emits /sweet-ufs (0x1d84000).
-- AFTER THAT: M0 backups (recovery image, non-destructive), then the real iOS root into
-  userdata — the one destructive step, explicit user confirmation required (AGENTS.md).
+- Remotes consolidated (user 2026-11-06): a single origin -> https://github.com/buzhaodi/ios-socrates.git;
+  the apollo/ios-sweet remotes are gone. CI builds run there (xnu.yml fires only when
+  xnu/patches/** changes - the M4 work touches none of it).
+- M3 flash #2 was GREEN (photo-decoded: full SWEET driver set, AppleCLCD 1440x1024@0xb8000000,
+  live 60Hz vsync - see the campaign log).
+- M4 probe image: shim runs the M2 UFS wake recipe before jumping to XNU (ufs_wake_for_kernel,
+  extracted from test_ufs with no sequence change); payload cmdline now rd=ufsroot0; the kernel
+  (xnu 0028 sweet_ufs.c, unchanged) should print `SWEET UFS: "userdata" on LUN 0: ...` and
+  then fail mounting (userdata is f2fs) - that mountroot panic IS the probe success.
+- NEXT: (user) flash shim/out-mac/xnu-boot.img (sha 45323896…) and photograph the panel:
+  red wake lines + the kernel SWEET UFS line. Then M0 backups, then the real iOS root into
+  userdata - the destructive step, explicit user confirmation required (AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

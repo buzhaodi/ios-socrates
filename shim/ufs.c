@@ -7,6 +7,12 @@
  * buffers and issues READ-ONLY SCSI commands on LUN 0. Nothing is ever
  * written to the device: there is no SCSI WRITE in this file.
  *
+ * Milestone 4 wake-up: ufs_wake_for_kernel() runs the M2-proven recipe
+ * (HCE reset + DME_POWERON + DME_LINK_STARTUP + bDeviceInit) and leaves the
+ * host with OUR transfer list installed and the link live, so the kernel's
+ * ufs_take_over_host (bsd/dev/sweet_ufs.c, xnu 0028) only has to re-point the
+ * list at its own DMA block on a warm, initialized device.
+ *
  * Register layout and descriptor formats: JEDEC UFSHCI (JESD223).
  */
 #include <stdint.h>
@@ -346,6 +352,155 @@ static uint32_t upiu_query_val(uint8_t opcode, uint8_t idn, uint8_t qfunc, uint3
 	return ucd.resp[6];
 }
 
+/* The M2-proven wake-up recipe, step by step. Each stage returns 0 on success
+ * and prints its own panel line, so a photo reads exactly where it died.
+ * Shared by test_ufs (probe) and ufs_wake_for_kernel (M4 boot path). */
+static uint32_t ufs_hce_reset(void)
+{
+	ufs_wr(REG_UTRLRSR, 0);			/* stop the transfer list */
+	ufs_wr(REG_HCE, 0);			/* disable host controller */
+	uint64_t t = ticks();
+	while (ticks() - t < 1920000)			/* 100 ms */
+		;
+	ufs_wr(REG_HCE, 1);			/* enable host controller */
+	t = ticks();
+	while (!(ufs_rd(REG_HCS) & HCS_DP) && ticks() - t < 19200000)
+		;
+	con_hex2("UFS RST", "hcs=", ufs_rd(REG_HCS), "hce=", ufs_rd(REG_HCE));
+	if (!(ufs_rd(REG_HCS) & HCS_DP))
+		return 1;
+	return 0;
+}
+
+static uint32_t ufs_uic_cmd(uint32_t cmd)
+{
+	ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
+	ufs_wr(0x90, cmd);
+	/* The UIC ready bit (0xA0 bit 0) is set when idle; a command makes it
+	 * drop. Wait for it to go low (command accepted) then high (done). */
+	uint64_t t = ticks();
+	while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)	/* wait drop: 100 ms */
+		;
+	t = ticks();
+	while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)	/* wait rise: 1 s */
+		;
+	return (ufs_rd(0xa0) & 1) ? 0 : 1;
+}
+
+/* Point the host at OUR transfer list (must be called after every HCE reset:
+ * the reset clears UTRLBA/UTRLBAU). Refuses to continue if the host did not
+ * take the base, so no doorbell ever rings on the bootloader's stale list. */
+static uint32_t ufs_take_list(void)
+{
+	ufs_wr(REG_UTRLRSR, 0);
+	uintptr_t list = (uintptr_t)utrl;
+	ufs_wr(REG_UTRLBA, (uint32_t)list);
+	ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
+	ufs_wr(REG_UTRLRSR, 1);
+	con_hex2("UFS", "ours=", (uint32_t)list, "rsr=", ufs_rd(REG_UTRLRSR));
+	if (ufs_rd(REG_UTRLBA) != (uint32_t)list || ufs_rd(REG_UTRLBAU) != (uint32_t)(list >> 32) ||
+	    !(ufs_rd(REG_UTRLRSR) & 1)) {
+		con_str("UFS", "list base not taken: stop");
+		return 1;
+	}
+	return 0;
+}
+
+/* The full recipe, from whatever state ABL left, to a warm device that
+ * accepts SCSI on LUN 0 with bDeviceInit clear. Returns 0 on success. */
+static uint32_t ufs_bringup(void)
+{
+	/* UFSHCI 4.0 (SM8550): the ABL may hand us the host in MCQ mode -
+	 * REG_UFS_MEM_CFG 0x300 bit 0 = MCQ_MODE_SELECT (include/ufs/ufshci.h).
+	 * In MCQ mode the legacy doorbell auto-completes with synthesized
+	 * UPIU-shaped responses: our first-flash TURs came back instantly with
+	 * the tag echoed, SCSI status 2 and NO sense bytes at all (and the NOP
+	 * OUT got a RESPONSE UPIU instead of a NOP IN). Switch back to legacy.
+	 */
+	uint32_t mem_cfg = ufs_rd(0x300);
+	con_hex2("UFS MODE", "mem_cfg=", mem_cfg, "mcq_cfg=", ufs_rd(0x380));
+	if (mem_cfg & 1) {
+		ufs_wr(0x300, mem_cfg & ~1u);
+		con_hex2("UFS MODE", "->legacy=", ufs_rd(0x300), "was=", mem_cfg);
+	}
+
+	uint32_t rc;
+	if ((rc = ufs_hce_reset()))
+		return 10 + rc;
+	if ((rc = ufs_uic_cmd(0x10))) {		/* DME_POWERON */
+		con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+		return 20 + rc;
+	}
+	con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+	if ((rc = ufs_uic_cmd(0x16))) {		/* DME_LINK_STARTUP */
+		con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+		return 30 + rc;
+	}
+	con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+	if ((rc = ufs_take_list()))
+		return 40 + rc;
+
+	/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
+	 * the host sets the DeviceInit flag (SET_FLAG query, idn 0x01) and the
+	 * device clears it when its bring-up is done - ufshcd's
+	 * ufshcd_dev_link_startup does this exact dance. v19: ALWAYS set after
+	 * the HCE reset - the reset puts the device back into "needs init" even
+	 * when the flag reads 0 (v18's skip kept TUR at 04/02). */
+	rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit */
+	con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[16]);
+	rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit */
+	con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
+	/* The device clears bDeviceInit when its bring-up is done. */
+	for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
+		uint64_t t = ticks();			/* 50 ms at 19.2 MHz */
+		while (ticks() - t < 960000)
+			;
+		rc = upiu_query(0x05, 0x01, 0x01);
+	}
+	con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
+	if (rc || ucd.resp[16])
+		return 50;
+
+	/* Prove the pipeline: NOP IN, then TUR (unit attention tolerated). */
+	rc = nop_upiu();
+	con_hex2("UFS NOP", "rc=", rc, "resp0=", ucd.resp[0]);
+	if (rc)
+		return 60;
+	static const uint8_t tur[6] = { 0x00 };
+	uint32_t ocs = 0, st = 0;
+	for (int i = 0; i < 3; i++) {
+		rc = scsi(0, tur, sizeof(tur), 0, 0, &ocs, &st);
+		con_hex2("UFS TUR", "rc=", rc, "ocs/st=", ocs << 8 | st);
+		if (!rc)
+			break;
+	}
+	if (rc)
+		return 70;
+	return 0;
+}
+
+/* M4 boot path: wake the device up for the kernel and leave OUR transfer
+ * list installed (the kernel re-points it at its own DMA block; it only
+ * needs HCE/DP/UTRLRDY, a live link and bDeviceInit clear). Prints one line
+ * per stage on the red loader screen; returns 0 when the link is warm. */
+uint32_t ufs_wake_for_kernel(void)
+{
+	con_str("UFS", "wake for kernel (M2 recipe)");
+	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
+	con_hex2("UFS", "hce=", hce, "hcs=", hcs);
+	if (!(hce & 1)) {
+		con_str("UFS", "host disabled: cannot wake");
+		return 1;
+	}
+	if (ufs_rd(REG_UTRLDBR)) {
+		con_str("UFS", "requests outstanding: stop");
+		return 2;
+	}
+	uint32_t rc = ufs_bringup();
+	con_hex2("UFS WAKE", "rc=", rc, "hcs=", ufs_rd(REG_HCS));
+	return rc;
+}
+
 void test_ufs(void)
 {
 	con_str("UFS", "milestone 5 probe (read-only)");
@@ -365,130 +520,17 @@ void test_ufs(void)
 		return;
 	}
 
-	/* UFSHCI 4.0 (SM8550): the ABL may hand us the host in MCQ mode -
-	 * REG_UFS_MEM_CFG 0x300 bit 0 = MCQ_MODE_SELECT (include/ufs/ufshci.h).
-	 * In MCQ mode the legacy doorbell auto-completes with synthesized
-	 * UPIU-shaped responses: our first-flash TURs came back instantly with
-	 * the tag echoed, SCSI status 2 and NO sense bytes at all (and the NOP
-	 * OUT got a RESPONSE UPIU instead of a NOP IN). Switch back to legacy.
-	 */
-	uint32_t mem_cfg = ufs_rd(0x300);
-	con_hex2("UFS MODE", "mem_cfg=", mem_cfg, "mcq_cfg=", ufs_rd(0x380));
-	if (mem_cfg & 1) {
-		ufs_wr(0x300, mem_cfg & ~1u);
-		con_hex2("UFS MODE", "->legacy=", ufs_rd(0x300), "was=", mem_cfg);
-	}
-
-	
-	/* Take over the transfer request list: stop, point at ours, run. */
-	ufs_wr(REG_UTRLRSR, 0);
-	uintptr_t list = (uintptr_t)utrl;
-	ufs_wr(REG_UTRLBA, (uint32_t)list);
-	ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
-	ufs_wr(REG_UTRLRSR, 1);
-	con_hex2("UFS", "ours=", (uint32_t)list, "rsr=", ufs_rd(REG_UTRLRSR));
-	/*
-	 * Never ring a doorbell unless the host really uses our list: otherwise
-	 * it would execute whatever ABL left in its own slot 0 (maybe a write).
-	 */
-	if (ufs_rd(REG_UTRLBA) != (uint32_t)list || ufs_rd(REG_UTRLBAU) != (uint32_t)(list >> 32) ||
-	    !(ufs_rd(REG_UTRLRSR) & 1)) {
-		con_str("UFS", "list base not taken: stop");
+	/* The M2 recipe: MCQ->legacy, HCE reset, DME poweron + link startup,
+	 * transfer-list takeover, bDeviceInit, NOP, TUR (see ufs_bringup). */
+	if (ufs_bringup()) {
+		con_str("UFS", "bringup failed (see stages above)");
 		return;
 	}
-
-	/* Full host controller reset + link startup (ufshcd cold-boot):
-	 * the ABL left the UFS in INACTIVE power mode (bPowerMode=0,
-	 * bBootLUNEn=0, write rejected). HCE reset re-initializes the host;
-	 * DME_POWERON + DME_LINK_STARTUP bring the link and the device up
-	 * from scratch — the sequence every UFS host does at cold boot. */
-	{
-		con_str("UFS RST", "HCE reset + DME link startup");
-		ufs_wr(REG_UTRLRSR, 0);			/* stop the transfer list */
-		ufs_wr(REG_HCE, 0);			/* disable host controller */
-		uint64_t t = ticks();
-		while (ticks() - t < 1920000)			/* 100 ms */
-			;
-		ufs_wr(REG_HCE, 1);			/* enable host controller */
-		t = ticks();
-		while (!(ufs_rd(REG_HCS) & HCS_DP) && ticks() - t < 19200000)
-			;
-		con_hex2("UFS RST", "hcs=", ufs_rd(REG_HCS), "hce=", ufs_rd(REG_HCE));
-
-		/* DME_POWERON: bring the device's power up */
-		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
-		ufs_wr(0x90, 0x10);			/* UIC_CMD_DME_POWERON */
-		/* The UIC ready bit (0xA0 bit 0) is set when idle; a command makes it
-		 * drop. Wait for it to go low (command accepted) then high (done). */
-		t = ticks();
-		while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)	/* wait drop: 100 ms */
-			;
-		t = ticks();
-		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)	/* wait rise: 1 s */
-			;
-		con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
-
-		/* DME_LINK_STARTUP: bring the UniPro link up */
-		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
-		ufs_wr(0x90, 0x16);			/* UIC_CMD_DME_LINK_STARTUP */
-		t = ticks();
-		while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)
-			;
-		t = ticks();
-		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)
-			;
-		con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
-
-		/* Re-take the transfer list (HCE reset cleared it) */
-		ufs_wr(REG_UTRLRSR, 0);
-		uintptr_t list = (uintptr_t)utrl;
-		ufs_wr(REG_UTRLBA, (uint32_t)list);
-		ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
-		ufs_wr(REG_UTRLRSR, 1);
-		con_hex2("UFS RST", "list=", ufs_rd(REG_UTRLBA), "rsr=", ufs_rd(REG_UTRLRSR));
-	}
-
-	/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
-	 * the host sets the DeviceInit flag (SET_FLAG query, idn 0x01) and the
-	 * device clears it when its bring-up is done - ufshcd's
-	 * ufshcd_dev_link_startup does this exact dance. Our first-flash NOP
-	 * passed while every SCSI command CHECK-CONDITIONed. */
-	/* Read the flag first: if the ABL already initialized the device during
-	 * its boot, bDeviceInit is already cleared and SET_FLAG returns
-	 * GENERIC_FAILURE (0xFF) for an already-done operation. */
-	{
-		uint32_t rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit */
-		con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[16]);
-		dump_response("UFS DEVINI");
-		if (1) {			/* v19: ALWAYS set after reset — the HCE reset may
-					 * have put the device back into "needs init" state
-					 * even with the flag reading 0 (v18's skip kept
-					 * TUR at 04/02). */
-			rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit */
-			con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
-			dump_response("UFS DEVINI");
-			/* The device clears bDeviceInit when its bring-up is done. */
-			for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
-				uint64_t t = ticks();		/* 50 ms at 19.2 MHz */
-				while (ticks() - t < 960000)
-					;
-				rc = upiu_query(0x05, 0x01, 0x01);
-			}
-			con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
-			dump_response("UFS DEVINI");
-		} else {
-			con_str("UFS DEVINI", "already clear, skipping set");
-		}
-	}
-
-	con_hex2("UFS NOP", "rc=", nop_upiu(), "resp0=", ucd.resp[0]);
-	dump_response("UFS NOP");
-
-	uint32_t ocs = 0, st = 0, rc;
 	/* REPORT LUNS: the standard SCSI enumeration first command (SPC-5,
 	 * opcode 0xa0, 12-byte CDB, allocation length at bytes 6-9 BE).
 	 * The 04/02 sense on a bDeviceInit-clear device is LUN-level:
 	 * the host must enumerate the LUNs before addressing them. */
+	uint32_t ocs = 0, st = 0, rc;
 	static uint8_t rl_buf[16];
 	static const uint8_t rl[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0 };
 	rc = scsi(0, rl, sizeof(rl), rl_buf, 16, &ocs, &st);

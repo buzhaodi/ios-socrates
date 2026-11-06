@@ -11,14 +11,14 @@ This repository is a **clone of [aTechGeekDev/ios-apollo](https://github.com/aTe
 
 ## Status
 
-The port is at the early milestones. Every test boot is a temporary `fastboot boot` — nothing is flashed. The full plan, the device fact bank and the campaign log live in [`PORTING-SOCRATES.md`](PORTING-SOCRATES.md).
+The port has XNU running on the phone; the remaining milestones bring up iOS proper. Every test boot is a temporary `fastboot boot` — nothing is flashed. The full plan, the device fact bank and the campaign log live in [`PORTING-SOCRATES.md`](PORTING-SOCRATES.md).
 
 | # | Milestone | Status | Evidence |
 | --- | --- | --- | --- |
 | 1 | Shim boots, draws on the panel | ✅ Done | `fastboot boot` → shim probe report on the 1440×3200 panel (gzip kernel + the 8-block socrates vendor DTB table) |
 | 2 | Internal UFS read | ✅ Done | TUR rc=0, REPORT LUNS (6 LUNs), SSU rc=0 after a 19-round bring-up; the socrates UFSHCI 4.0 wake-up recipe is in `PORTING-SOCRATES.md` |
-| 3 | XNU reaches fbcon | 🚧 In progress | Kernel builds on GitHub Actions (macos runners); socrates ADT (`tools/mkadt.py`) ready |
-| 4 | iOS root, launchd → SpringBoard | ❌ Not started | Needs M3 + the iPhone X root build (`tools/build-ios-root.sh`) |
+| 3 | XNU reaches fbcon | ✅ Done | **On hardware** (2026-11-06): QEMU run6 green, then the flash #2 photo shows the full SWEET driver set, `AppleCLCD 1440x1024 stride 5760 at 0xb8000000`, and a live 60 Hz vsync heartbeat (`600 vsyncs, 0 skipped, 1.8 ms late`) — the GICv3 routing, arch timer and display engine all work on the real SM8550 |
+| 4 | iOS root, launchd → SpringBoard | 🚧 In progress | M4 probe image built: the shim runs the M2 UFS wake-up recipe before jumping to XNU, the kernel boots with `rd=ufsroot0` so `bsd/dev/sweet_ufs.c` reports the `userdata` GPT partition on the panel. The iOS root itself (`tools/build-ios-root.sh`) and the write into `userdata` come next |
 | 5 | Touch | ❌ Not started | Goodix over SPI — the one new-vendor driver to write (upstream: Novatek) |
 | 6 | Buttons, backlight, CPU freq | ❌ Not started | PM8550-family keys, WLED, EPSS domains (same EPSS driver family as upstream) |
 | 7 | GPU | ❌ Not started | Adreno 740 (upstream: Adreno 650) — a740 GMU firmware + Mesa a7xx |

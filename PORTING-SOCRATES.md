@@ -276,17 +276,49 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
     `SWEET UFS: "userdata" on LUN 0: first block ... read-only` on the panel — that is
     the M4 probe, no iOS root required yet.
 
+### 2026-11-06 — M4 probe image built: shim wakes the UFS for the kernel, payload boots rd=ufsroot0
+
+- The one kernel fact that shapes M4: `ufs_take_over_host` (xnu 0028, bsd/dev/sweet_ufs.c)
+  REUSES a live link — it checks HCE/DP/UTRLRDY, re-points the transfer list at its own DMA
+  block and TURs with 3 unit-attention retries. It has no UIC path, so it cannot bring the
+  device up from the state the ABL leaves (bPowerMode=0, bBootLUNEn=0 — M2 proven). The
+  wake therefore belongs to the shim, which owns the 19-round-proven recipe.
+- shim/ufs.c refactored, no behavior change to the sequence: the M2 wake steps moved out of
+  test_ufs into ufs_bringup() (MCQ->legacy, HCE reset, DME_POWERON, DME_LINK_STARTUP,
+  transfer-list takeover, SET bDeviceInit + poll, NOP, TUR) — the same register writes in
+  the same order, now callable from both paths. ufs_wake_for_kernel() is the M4 entry:
+  gate checks (HCE set, doorbell clear) then ufs_bringup(), one red panel line per stage.
+- shim/shim.c: the payload path now runs ufs_wake_for_kernel() BEFORE loader_boot() and
+  prints `UFS WAKE final rc=`. A failed wake still boots XNU — the kernel's own probe
+  line then tells us what it found, which is the diagnostic we want either way.
+- tools: socrates.adt rebuilt (unchanged bytes — /sweet-ufs reg 0x1d84000/0x3000 was
+  already there); payload rebuilt with `rd=ufsroot0` appended to the cmdline (mkpayload.py
+  --cmdline). The kernel parses rd=ufsroot0 in IOFindBSDRoot -> sweet_ufs_rootdev ->
+  ufsroot= boot-arg (default "userdata") picks the GPT partition by name.
+- The packed image, shim/out-mac/xnu-boot.img, sha256 45323896c5d870009d9f423f6ba3b5ca…:
+  embedded Image.gz byte-identical to the fresh build (v_height=1024 store present, the
+  3200 encoding absent, 'wake for kernel' string in the binary); ramdisk byte-identical
+  to the rd=ufsroot0 payload; ADT carries sweet-ufs (reg at node+0x88), fbcon 0x1194000,
+  xiaomi,sweet compatible.
+- Expected panel on the phone (all of it photographable, no serial):
+  - red shim lines: the wake stages (UFS RST/DEVINI/NOP/TUR) + `UFS WAKE final rc=0`;
+  - XNU clears the screen, then `SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB,
+    read-only` + `BSD root: ufsroot0`, then a mountroot panic (userdata is f2fs, not
+    HFS+) = M4 probe SUCCESS;
+  - if the link does not survive the handoff: `SWEET UFS: host not ready (hce .. hcs ..)`
+    then panic `SWEET UFS root ufsroot0 unavailable: 5` = the kernel-side fallback (port
+    the recipe into the kernel) becomes the next step.
+- Repo: remotes consolidated to a single origin -> github.com/buzhaodi/ios-socrates
+  (user 2026-11-06: all changes and the CI builds live there; the old apollo/ios-sweet
+  remotes removed). README status table updated: M3 done on hardware, M4 in progress.
+
 ### Next concrete actions
-1. (agent) M4 probe image: add `rd=ufsroot0` to the payload cmdline (mkpayload.py) and have
-   the SHIM run the full M2 UFS wake-up recipe before jumping to XNU (the kernel's
-   ufs_take_over_host expects a live link). Rebuild, verify, hand to the user.
-2. (user) Flash the M4 probe image the same way (Android boot once, unlock, ~30 s,
-   `fastboot boot .../xnu-boot.img`, photo the panel). Green looks like:
-   `SWEET UFS: "userdata" on LUN 0: first block 0x..., NNNN MiB, read-only` + a root-mount
-   panic (no iOS root in userdata yet — expected).
-3. (user) Photograph the lower half of the M2 panel — the partition list for the record.
-4. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
+1. (user) M4 probe flash, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 45323896…): full Android boot once, unlock, ~30 s, `fastboot boot` it, photograph
+   the panel — red wake lines AND the kernel SWEET UFS line if it works.
+2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
+3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
-5. (agent) M4 proper: build the iOS root (tools/build-ios-root.sh, iPhone X 16.7.16 IPSW,
+4. (agent) M4 proper: build the iOS root (tools/build-ios-root.sh, iPhone X 16.7.16 IPSW,
    needs Linux/WSL + ~40 GB) and write it into userdata - ONLY with the user's explicit
    confirmation at that destructive step (AGENTS.md rule).
