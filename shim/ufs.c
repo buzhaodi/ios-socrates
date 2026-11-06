@@ -192,17 +192,19 @@ static void list_partitions(uint32_t entry_lba, uint32_t nent)
 	}
 }
 
-/* Sense dump: the response UPIU after a CHECK CONDITION carries the sense
- * at byte 16 - the key/ASC/ASCQ says exactly why the device refused. */
+/* Sense dump - the RESPONSE UPIU layout per struct utp_cmd_rsp
+ * (include/ufs/ufs.h): header[0..11] (status at byte 7), residual
+ * transfer count[12..15], reserved[16..31], sense_data_len[32..33],
+ * sense_data[34..51] (key at sense[2], ASC at [12], ASCQ at [13]).
+ * The v3/v4 dump printed [16..23] - reserved, hence the all-zero "sns". */
 static void dump_response(const char *tag)
 {
 	const volatile uint8_t *r = ucd.resp;
 	con_hex2(tag, "r0=", r[0] | r[1] << 8 | r[2] << 16 | r[3] << 24,
 	    "r1=", r[4] | r[5] << 8 | r[6] << 16 | r[7] << 24);
-	con_hex2(tag, "r2=", r[8] | r[9] << 8 | r[10] << 16 | r[11] << 24,
-	    "r3=", r[12] | r[13] << 8 | r[14] << 16 | r[15] << 24);
-	con_hex2(tag, "sns=", r[16] | r[17] << 8 | r[18] << 16 | r[19] << 24,
-	    "asc=", r[20] | r[21] << 8 | r[22] << 16 | r[23] << 24);
+	con_hex2(tag, "resid=", r[12] | r[13] << 8 | r[14] << 16 | r[15] << 24,
+	    "slen=", r[32] | r[33] << 8);
+	con_hex2(tag, "key=", r[36], "asc/ascq=", r[46] | r[47] << 8);
 }
 
 /* NOP OUT: the UFS-native ping. Completing with a NOP IN (0x22) proves the
@@ -230,7 +232,39 @@ static uint32_t nop_upiu(void)
 		}
 	}
 	__asm__ volatile("dsb sy" ::: "memory");
-	return ucd.resp[0] == 0x22 ? 0 : 2;	/* 0 = NOP IN came back */
+	return ucd.resp[0] == 0x20 ? 0 : 2;	/* NOP IN is 0x20 (0x22 is DATA IN) */
+}
+
+/* One QUERY UPIU (SET/READ FLAG): the QUERY REQUEST is type 0x04, the query
+ * body after the 12-byte header holds opcode/idn/index/selector (struct
+ * utp_upiu_query); the device answers a QUERY RESPONSE, type 0x26. Returns 0
+ * if a 0x26 came back, 1 on doorbell timeout, 2 on a wrong response type. */
+static uint32_t upiu_query(uint8_t opcode, uint8_t idn)
+{
+	static uint8_t tag;
+	zero(&utrl[0], sizeof(utrl[0]));
+	zero(&ucd, sizeof(ucd));
+	ucd.cmd[0] = 0x04;			/* QUERY REQUEST */
+	ucd.cmd[3] = ++tag;
+	ucd.cmd[12] = opcode;
+	ucd.cmd[13] = idn;
+	uintptr_t ucd_pa = (uintptr_t)&ucd;
+	utrl[0].dw0 = (1u << 28) | (1u << 24);	/* UFS storage, no data */
+	utrl[0].dw2 = 0x0f;
+	utrl[0].ucdba = (uint32_t)ucd_pa;
+	utrl[0].ucdbau = (uint32_t)(ucd_pa >> 32);
+	utrl[0].resp = (512u / 4) << 16 | (512u / 4);
+	__asm__ volatile("dsb sy" ::: "memory");
+	ufs_wr(REG_UTRLDBR, 1);
+	uint64_t start = ticks();
+	while (ufs_rd(REG_UTRLDBR) & 1) {
+		if (ticks() - start > 19200000) {
+			ufs_wr(REG_UTRLCLR, ~1u);
+			return 1;
+		}
+	}
+	__asm__ volatile("dsb sy" ::: "memory");
+	return ucd.resp[0] == 0x26 ? 0 : 2;
 }
 
 void test_ufs(void)
@@ -264,6 +298,25 @@ void test_ufs(void)
 	if (mem_cfg & 1) {
 		ufs_wr(0x300, mem_cfg & ~1u);
 		con_hex2("UFS MODE", "->legacy=", ufs_rd(0x300), "was=", mem_cfg);
+	}
+
+		/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
+	 * the host sets the DeviceInit flag (SET_FLAG query, idn 0x01) and the
+	 * device clears it when its bring-up is done - ufshcd's
+	 * ufshcd_dev_link_startup does this exact dance. Our first-flash NOP
+	 * passed while every SCSI command CHECK-CONDITIONed. */
+	{
+		uint32_t rc = upiu_query(0x06, 0x01);		/* SET_FLAG bDeviceInit */
+		con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
+		dump_response("UFS DEVINI");
+		for (int i = 0; i < 20 && !rc; i++) {		/* device clears the flag when ready */
+			uint64_t t = ticks();			/* 50 ms at 19.2 MHz (delay_ms is shim.c's) */
+			while (ticks() - t < 960000)
+				;
+			rc = upiu_query(0x05, 0x01);		/* READ_FLAG bDeviceInit */
+		}
+		con_hex2("UFS DEVINI", "poll rc=", rc, "resp0=", ucd.resp[0]);
+		dump_response("UFS DEVINI");
 	}
 
 	/* Take over the transfer request list: stop, point at ours, run. */
