@@ -2,21 +2,16 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 00:50): flash #3 verdict — the wake RAN, failed on warm-reset DP semantics; fixed (kernel c02099eb…, CI 42250759235 green); flash #4 image 8405b864… ready <<<
+### >>> SOCRATES (2026-11-07 00:55): flash #4 verdict — POWERON rejected on a live device (ufshcd's rule); LINK_STARTUP-first built (kernel dc0c0abb…, CI 42253265322 green); flash #5 image 7c5ee1b0… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Flash #3 photo-decoded: the kernel-side wake executed for the first time and diagnosed
-  its own failure: 'host not ready ... waking' -> 'wake: HCE reset failed (hcs 0xB)'. On a
-  warm (second-of-boot) HCE reset DP does not rise alone - it returns only after
-  DME_POWERON + DME_LINK_STARTUP, which the old order never reached. Fix in xnu 0028
-  (commit a64aed8): HCE reset -> UCRDY gate -> UIC pair -> DP poll; failure lines print
-  hce+hcs. validate-repo + strict git-apply chain green.
-- Flash #4 image shim/out-mac/xnu-boot.img sha 8405b864… ready (verified inside:
-  warm-reset strings in the kernel, shim wake, rd=ufsroot0, kryo470 x8).
-- NEXT: (user) flash #4. Success = 'wake: link re-established' -> 'userdata on LUN 0' ->
-  mountroot panic. Then M0 backups, then the iOS root build into userdata (destructive;
-  explicit confirmation required - AGENTS.md).
+- Wake failure-point trajectory: #3 HCE/DP order -> #4 POWERON-rejected -> #5 LINK_STARTUP
+  first with POWERON as the cold fallback. Each flash moved exactly one layer deeper.
+- Flash #5 image shim/out-mac/xnu-boot.img sha 7c5ee1b00d06bb57… ready (verified inside).
+- NEXT: (user) flash #5. Success = 'wake: link re-established' -> fDeviceInit -> TUR ->
+  'userdata on LUN 0' -> mountroot panic = M4 probe done. Then M0 backups, then the iOS
+  root build into userdata (destructive; explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

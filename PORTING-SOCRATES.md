@@ -398,10 +398,30 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   then try hibernate-exit or skipping POWERON on warm reset; 'no device present after
   link startup' = link up but device silent.
 
+### 2026-11-07 — flash #4 verdict: POWERON to a live device rejected; LINK_STARTUP-first order built (flash #5 image 7c5ee1b0…)
+
+- Flash #4 (8405b864): the warm-reset fix WORKED - the wake passed the HCE reset +
+  UCRDY gate and reached the UIC pair, where DME_POWERON was rejected:
+  'SWEET UFS: wake: UIC 0x10 (is 0x404 err 0x80000001)' - a physical-adapter error.
+  On the boot's second wake the device is ALREADY powered; POWERON to a live device
+  is exactly what ufshcd never does (link recovery repeats LINK_STARTUP). The M2
+  recipe's POWERON was proven only on the ABL's dead state.
+- Fix (5492094, CI 42253265322 green, kernel dc0c0abb…): DME_LINK_STARTUP first (the
+  warm path); on failure, DME_POWERON + LINK_STARTUP retry (the cold fallback, the M2
+  recipe). Both handoff states covered without probing which one we are in.
+- Flash #5 image shim/out-mac/xnu-boot.img sha 7c5ee1b00d06bb572a012b9d58bea2a50b3947
+  95a0fe104f6e4df8385707db8e (shim wake + LINK_STARTUP-first kernel wake + rd=ufsroot0
+  + kryo470 x8, verified inside).
+- Flash #5 expectations: 'waking' -> (no UIC error expected) -> 'link re-established
+  (hcs 0xB)' -> fDeviceInit set/poll -> TUR -> 'SWEET UFS: "userdata" on LUN 0: first
+  block 0x…, N MiB, read-only' -> 'BSD root: ufsroot0' -> mountroot panic = M4 PROBE
+  SUCCESS. If LINK_STARTUP is also rejected, the panel says so and hibernate-exit /
+  SSU-first variants are the next candidates.
+
 ### Next concrete actions
-1. (user) M4 probe flash #4, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 8405b864…): same drill. Success = 'wake: link re-established' + 'userdata on
-   LUN 0' + mountroot panic.
+1. (user) M4 probe flash #5, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 7c5ee1b0…): same drill. Success = 'link re-established' + 'userdata on LUN 0'
+   + mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
