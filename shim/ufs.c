@@ -384,6 +384,21 @@ void test_ufs(void)
 	dump_response("UFS NOP");
 
 	uint32_t ocs = 0, st = 0, rc;
+	/* REPORT LUNS: the standard SCSI enumeration first command (SPC-5,
+	 * opcode 0xa0, 12-byte CDB, allocation length at bytes 6-9 BE).
+	 * The 04/02 sense on a bDeviceInit-clear device is LUN-level:
+	 * the host must enumerate the LUNs before addressing them. */
+	static uint8_t rl_buf[16];
+	static const uint8_t rl[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0 };
+	rc = scsi(0, rl, sizeof(rl), rl_buf, 16, &ocs, &st);
+	con_hex2("UFS RLUNS", "rc=", rc, "ocs/st=", ocs << 8 | st);
+	if (rc == 4)
+		dump_response("UFS RLUNS");
+	if (!rc) {
+		uint32_t nluns = rl_buf[3] / 8;
+		con_hex2("UFS RLUNS", "luns=", nluns, "first=", rl_buf[8] | rl_buf[9] << 8);
+	}
+
 	/* The v6 TUR sense: key 2 (NOT READY), ASC/ASCQ 04/02 "LOGICAL UNIT NOT
 	 * READY - INITIALIZING COMMAND REQUIRED" (SPC-5). The initializing
 	 * command is START STOP UNIT: opcode 0x1b, START bit = byte 4 bit 0. */
