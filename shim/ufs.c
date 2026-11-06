@@ -402,6 +402,19 @@ void test_ufs(void)
 	/* The v6 TUR sense: key 2 (NOT READY), ASC/ASCQ 04/02 "LOGICAL UNIT NOT
 	 * READY - INITIALIZING COMMAND REQUIRED" (SPC-5). The initializing
 	 * command is START STOP UNIT: opcode 0x1b, START bit = byte 4 bit 0. */
+	/* Device attributes via the (now proven) query channel: bBootLUNEn
+	 * (idn 0x00) gates whether the boot LU accepts I/O; bPowerMode (idn 0x02)
+	 * is ACTIVE(1)/SLEEP(2)/... — both tell us WHY the SCSI LUN is 04/02. */
+	for (int idn = 0; idn < 3; idn++) {
+		uint32_t rc = upiu_query(0x03, idn, 0x01);	/* READ_ATTR */
+		/* the 2-byte attribute value comes in the query response body */
+		con_hex2("UFS ATTR", "idn=", idn, "rc=", rc);
+		con_hex2("UFS ATTR", "r0=", ucd.resp[0] | ucd.resp[1] << 8 | ucd.resp[2] << 16 | ucd.resp[3] << 24,
+		    "r1=", ucd.resp[4] | ucd.resp[5] << 8 | ucd.resp[6] << 16 | ucd.resp[7] << 24);
+		con_hex2("UFS ATTR", "val16=", ucd.resp[15] | ucd.resp[16] << 8,
+		    "r12=", ucd.resp[12] | ucd.resp[13] << 8 | ucd.resp[14] << 16 | ucd.resp[15] << 24);
+	}
+
 	static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 1, 0 };
 	rc = scsi(0, ssu, sizeof(ssu), 0, 0, &ocs, &st);
 	con_hex2("UFS SSU", "rc=", rc, "ocs/st=", ocs << 8 | st);
