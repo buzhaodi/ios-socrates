@@ -255,98 +255,6 @@ new file mode 100644
 +	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK);
 +}
 +
-+/*
-+ * One QUERY UPIU through the same UTRD slot (the v5-v19 shim lessons: command
-+ * type stays UFS STORAGE, the query function rides byte 5, the response code
-+ * at resp[6]; a query goes through the device management layer and needs the
-+ * OCS-sentinel poll after the doorbell clears).
-+ */
-+static int
-+ufs_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
-+{
-+	struct utrd *utrd = (struct utrd *)(su.dma + DMA_UTRL);
-+	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
-+	uint64_t ucd_pa = su.dma_pa + DMA_UCD;
-+
-+	bzero(utrd, sizeof(*utrd));
-+	bzero(ucd, sizeof(*ucd));
-+	ucd->cmd[0] = 0x16;                     /* QUERY REQUEST */
-+	ucd->cmd[2] = 0xd0;                     /* the DEVICE W-LUN */
-+	ucd->cmd[3] = ++su.tag;
-+	ucd->cmd[4] = 0x02;                     /* command set type = QUERY */
-+	ucd->cmd[5] = qfunc;                    /* 0x81 STD WRITE / 0x01 STD READ */
-+	ucd->cmd[12] = opcode;
-+	ucd->cmd[13] = idn;
-+
-+	utrd->dw0 = (1u << 28) | (1u << 24);    /* UFS storage, no data */
-+	utrd->dw2 = 0x0f;
-+	utrd->ucdba = (uint32_t)ucd_pa;
-+	utrd->ucdbau = (uint32_t)(ucd_pa >> 32);
-+	utrd->resp = (512u / 4) << 16 | (512u / 4);
-+
-+	dma_sync(DMA_UTRL, sizeof(*utrd));
-+	dma_sync(DMA_UCD, sizeof(*ucd));
-+	__builtin_arm_dsb(0xf);
-+
-+	ufs_wr(REG_UTRLDBR, 1);
-+	uint64_t deadline;
-+	nanoseconds_to_absolutetime(CMD_TIMEOUT_NS * 5, &deadline);
-+	deadline += mach_absolute_time();
-+	while (ufs_rd(REG_UTRLDBR) & 1) {
-+		if (mach_absolute_time() > deadline) {
-+			ufs_wr(REG_UTRLCLR, ~1u);
-+			return ETIMEDOUT;
-+		}
-+		delay(1);
-+	}
-+	/* OCS only leaves the sentinel when the device management layer finishes. */
-+	dma_sync(DMA_UTRL, sizeof(*utrd));
-+	while ((utrd->dw2 & 0xff) == 0x0f) {
-+		if (mach_absolute_time() > deadline) {
-+			ufs_wr(REG_UTRLCLR, ~1u);
-+			return ETIMEDOUT;
-+		}
-+		delay(1);
-+		dma_sync(DMA_UTRL, sizeof(*utrd));
-+	}
-+	dma_sync(DMA_UCD, sizeof(*ucd));
-+	__builtin_arm_dsb(0xf);
-+	ufs_wr(REG_IS, ufs_rd(REG_IS));
-+	if (ucd->resp[0] != 0x36) {             /* QUERY RESPONSE */
-+		printf("SWEET UFS: query upiu 0x%x ocs 0x%x\n", ucd->resp[0], utrd->dw2 & 0xff);
-+		return EIO;
-+	}
-+	return ucd->resp[6];                     /* 0 = success, nonzero = query code */
-+}
-+
-+/*
-+ * fDeviceInit: the device refuses SCSI until the host sets the flag; the
-+ * device clears it when bring-up finishes. ALWAYS set it after an HCE reset
-+ * (v19 lesson: the reset re-arms the need even when the flag reads clear).
-+ */
-+static int
-+ufs_dev_init(void)
-+{
-+	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
-+	int error = ufs_query(0x06, 0x01, 0x81);         /* SET_FLAG fDeviceInit */
-+	if (error) {
-+		printf("SWEET UFS: set fDeviceInit error %d\n", error);
-+		return error;
-+	}
-+	for (int i = 0; i < 100; i++) {                  /* up to 5 s */
-+		error = ufs_query(0x05, 0x01, 0x01);     /* READ_FLAG fDeviceInit */
-+		if (error) {
-+			return error;
-+		}
-+		if (ucd->resp[16] == 0) {
-+			return 0;                       /* cleared: bring-up done */
-+		}
-+		delay(50);
-+	}
-+	printf("SWEET UFS: fDeviceInit never cleared\n");
-+	return ETIMEDOUT;
-+}
-+
 +static int
 +ufs_find_partition(const char *want)
 +{
@@ -457,6 +365,98 @@ new file mode 100644
 +	}
 +	printf("SWEET UFS: wake: link re-established (hcs 0x%x)\n", ufs_rd(REG_HCS));
 +	return 0;
++}
++
++/*
++ * One QUERY UPIU through the same UTRD slot (the v5-v19 shim lessons: command
++ * type stays UFS STORAGE, the query function rides byte 5, the response code
++ * at resp[6]; a query goes through the device management layer and needs the
++ * OCS-sentinel poll after the doorbell clears).
++ */
++static int
++ufs_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
++{
++	struct utrd *utrd = (struct utrd *)(su.dma + DMA_UTRL);
++	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
++	uint64_t ucd_pa = su.dma_pa + DMA_UCD;
++
++	bzero(utrd, sizeof(*utrd));
++	bzero(ucd, sizeof(*ucd));
++	ucd->cmd[0] = 0x16;                     /* QUERY REQUEST */
++	ucd->cmd[2] = 0xd0;                     /* the DEVICE W-LUN */
++	ucd->cmd[3] = ++su.tag;
++	ucd->cmd[4] = 0x02;                     /* command set type = QUERY */
++	ucd->cmd[5] = qfunc;                    /* 0x81 STD WRITE / 0x01 STD READ */
++	ucd->cmd[12] = opcode;
++	ucd->cmd[13] = idn;
++
++	utrd->dw0 = (1u << 28) | (1u << 24);    /* UFS storage, no data */
++	utrd->dw2 = 0x0f;
++	utrd->ucdba = (uint32_t)ucd_pa;
++	utrd->ucdbau = (uint32_t)(ucd_pa >> 32);
++	utrd->resp = (512u / 4) << 16 | (512u / 4);
++
++	dma_sync(DMA_UTRL, sizeof(*utrd));
++	dma_sync(DMA_UCD, sizeof(*ucd));
++	__builtin_arm_dsb(0xf);
++
++	ufs_wr(REG_UTRLDBR, 1);
++	uint64_t deadline;
++	nanoseconds_to_absolutetime(CMD_TIMEOUT_NS * 5, &deadline);
++	deadline += mach_absolute_time();
++	while (ufs_rd(REG_UTRLDBR) & 1) {
++		if (mach_absolute_time() > deadline) {
++			ufs_wr(REG_UTRLCLR, ~1u);
++			return ETIMEDOUT;
++		}
++		delay(1);
++	}
++	/* OCS only leaves the sentinel when the device management layer finishes. */
++	dma_sync(DMA_UTRL, sizeof(*utrd));
++	while ((utrd->dw2 & 0xff) == 0x0f) {
++		if (mach_absolute_time() > deadline) {
++			ufs_wr(REG_UTRLCLR, ~1u);
++			return ETIMEDOUT;
++		}
++		delay(1);
++		dma_sync(DMA_UTRL, sizeof(*utrd));
++	}
++	dma_sync(DMA_UCD, sizeof(*ucd));
++	__builtin_arm_dsb(0xf);
++	ufs_wr(REG_IS, ufs_rd(REG_IS));
++	if (ucd->resp[0] != 0x36) {             /* QUERY RESPONSE */
++		printf("SWEET UFS: query upiu 0x%x ocs 0x%x\n", ucd->resp[0], utrd->dw2 & 0xff);
++		return EIO;
++	}
++	return ucd->resp[6];                     /* 0 = success, nonzero = query code */
++}
++
++/*
++ * fDeviceInit: the device refuses SCSI until the host sets the flag; the
++ * device clears it when bring-up finishes. ALWAYS set it after an HCE reset
++ * (v19 lesson: the reset re-arms the need even when the flag reads clear).
++ */
++static int
++ufs_dev_init(void)
++{
++	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
++	int error = ufs_query(0x06, 0x01, 0x81);         /* SET_FLAG fDeviceInit */
++	if (error) {
++		printf("SWEET UFS: set fDeviceInit error %d\n", error);
++		return error;
++	}
++	for (int i = 0; i < 100; i++) {                  /* up to 5 s */
++		error = ufs_query(0x05, 0x01, 0x01);     /* READ_FLAG fDeviceInit */
++		if (error) {
++			return error;
++		}
++		if (ucd->resp[16] == 0) {
++			return 0;                       /* cleared: bring-up done */
++		}
++		delay(50);
++	}
++	printf("SWEET UFS: fDeviceInit never cleared\n");
++	return ETIMEDOUT;
 +}
 +
 +static int
