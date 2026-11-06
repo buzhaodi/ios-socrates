@@ -2,27 +2,25 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-06 ~23:30): THE PRE-BSD PARK ROOT-CAUSED — /cpus compatible must be 'qcom,kryo470' (the SweetCPU match key, not a hw fact); new image cdc2ca40… QEMU-proven to reach IOFindBSDRoot <<<
+### >>> SOCRATES (2026-11-07 00:10): kernel-side UFS wake BUILT (CI 42245344012 green, kernel sha 78765a9e…); flash #3 image 02cde07a… ready — the M4 probe now wakes the link itself <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- The M4 probe flash #1 photo: kernel alive to the driver set + heartbeats, then parked forever
-  before IOFindBSDRoot - the SAME park in QEMU (30/120/300 s), so a payload bug, not hardware.
-- ROOT CAUSE: the socrates constants pass changed the ADT /cpus compatible from upstream's
-  'qcom,kryo470' to 'qcom,kryo' - but kryo470 is the SweetCPU driver's IONameMatch (xnu 0018;
-  apollo's real ADT ships it). Without the match: no CPU nub, no startAll (xnu 0065), no
-  gIOAllCPUInitializedKey, and bsd_init never runs. QEMU run6's "60 s green" was parked-green.
-  M3's evidence (fbcon, drivers, 60 Hz vsync) all still stands - it just hid this bug behind it.
-- Fixed in mkadt.py; ADTs + payloads + image rebuilt. QEMU proof (qemu-m4-fix, 90 s): the
-  kernel now reaches bsd_init and panics with the DESIGNED message - 'SWEET UFS: no
-  /sweet-ufs node in the device tree' -> 'IOFindBSDRoot: SWEET UFS root ufsroot0 unavailable'
-  (QEMU's ADT has no UFS node; on the phone /sweet-ufs exists, so the same path should report
-  the userdata partition instead).
-- NEW flash image: shim/out-mac/xnu-boot.img, sha256 cdc2ca4066f80955f121c70aabc09447aeb4053b
-  e53a20a799e93b58926c8008. Verified inside: shim UFS wake + rd=ufsroot0 + kryo470 x8.
-- NEXT: (user) flash #2 same drill; photograph the panel (expect the SWEET UFS line or the
-  kernel's UFS diagnostic). Then M0 backups, then the iOS root into userdata (destructive,
-  explicit confirmation required - AGENTS.md).
+- CI workflow note: build.sh applies patches with git apply (STRICT). validate-repo uses GNU
+  patch -f (fuzz) - a mismatch that hid a context break (fixed; the wake block now sits
+  before ufs_take_over_host). Kernel artifact needs auth: gh is installed + logged in
+  (buzhaodi); downloads go through the user's proxy 127.0.0.1:10808.
+- Flash #2 result (photo-decoded): kryo470 fix WORKED - bsd_init ran (Skywalk POST all
+  PASS) and the UFS probe executed for the first time: 'host not ready (hce 0x1 hcs
+  0x?)' -> the shim-built link does not survive to kernel probe time.
+- Fix: the 19-round M2 wake recipe now ALSO lives in the kernel (xnu 0028: ufs_wake_host
+  + ufs_query + ufs_dev_init; wakes on the not-ready gate, sets/polls fDeviceInit after).
+  CI 42245344012 green; strings verified in the binary.
+- NEW flash image: shim/out-mac/xnu-boot.img sha 02cde07a… (shim wake + kernel wake +
+  rd=ufsroot0 + kryo470 x8, all verified inside the image).
+- NEXT: (user) flash #3 same drill; expect 'waking -> link re-established -> userdata on
+  LUN 0 -> BSD root: ufsroot0 -> mountroot panic' = M4 probe success. Then M0 backups,
+  then the iOS root into userdata (destructive; explicit confirmation required).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

@@ -348,12 +348,36 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - New flash image: shim/out-mac/xnu-boot.img sha cdc2ca4066f80955f121c70aabc09447aeb4053b
   e53a20a799e93b58926c8008 (shim wake + rd=ufsroot0 + kryo470 x8 verified inside).
 
+### 2026-11-07 — kernel-side UFS wake built + flash #3 image (02cde07a…)
+
+- CI round 1 (42242014697) failed 'a patch of ours was not applied': build.sh applies with
+  git apply (STRICT, no fuzz) and 0030's hunk @-202 refused - my wake block sat between
+  read_blocks and find_partition. validate-repo replayed with GNU patch -f, which fuzzed
+  over it - a structural blind spot between the two tools. Fixed by moving
+  ufs_query/ufs_dev_init to just before ufs_take_over_host; proven with a clean-room
+  STRICT git-apply chain of all 186 patches (31 ufs sections, zero refused).
+- CI round 2 (42245344012) GREEN. Kernel downloaded via gh + user proxy
+  (127.0.0.1:10808), sha 78765a9e… verified against the artifact's SHA256SUMS. The
+  binary carries the wake: 'host not ready (hce 0x%x hcs 0x%x), waking',
+  'wake: link re-established (hcs 0x%x)', 'set fDeviceInit error %d',
+  'fDeviceInit never cleared'.
+- Flash #3 image shim/out-mac/xnu-boot.img sha 02cde07a…: shim wake (red lines) +
+  kernel-side wake + rd=ufsroot0 + kryo470 x8 + /sweet-ufs + fbcon 18MB - verified
+  inside the image. Both wake layers run: the shim's pre-XNU wake (whose link dies
+  before bsd_init - flash #2 evidence) and now the kernel's own re-wake at probe time.
+- Expected flash #3 panel (all photographable):
+  1. XNU console to the SWEET driver set (as flash #2), then
+  2. 'SWEET UFS: host not ready (hce 0x.. hcs 0x..), waking' -> 'wake: link
+     re-established (hcs 0xB)' -> fDeviceInit SET/poll lines -> TUR -> GPT ->
+     'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' ->
+     'BSD root: ufsroot0' -> mountroot panic (userdata is f2fs) = M4 PROBE SUCCESS.
+  3. If the kernel wake fails at a stage, its line names the stage exactly.
+
 ### Next concrete actions
-1. (user) M4 probe flash #2, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha cdc2ca40…): same drill (Android boot once, unlock, ~30 s, fastboot boot, photo).
-   Expect either 'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' + a
-   mountroot panic (PROBE SUCCESS), or the UFS diagnostic line saying what the kernel
-   found instead (host not ready / no GPT / etc.) — either way the path is now exercised.
+1. (user) M4 probe flash #3, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 02cde07a…): same drill (Android boot once, unlock, ~30 s, fastboot boot, photo).
+   Watch for the 'waking' + 'link re-established' + 'userdata on LUN 0' lines; the
+   mountroot panic after them is the SUCCESS signal.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
