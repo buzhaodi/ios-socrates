@@ -397,6 +397,49 @@ void test_ufs(void)
 		return;
 	}
 
+	/* Full host controller reset + link startup (ufshcd cold-boot):
+	 * the ABL left the UFS in INACTIVE power mode (bPowerMode=0,
+	 * bBootLUNEn=0, write rejected). HCE reset re-initializes the host;
+	 * DME_POWERON + DME_LINK_STARTUP bring the link and the device up
+	 * from scratch — the sequence every UFS host does at cold boot. */
+	{
+		con_str("UFS RST", "HCE reset + DME link startup");
+		ufs_wr(REG_UTRLRSR, 0);			/* stop the transfer list */
+		ufs_wr(REG_HCE, 0);			/* disable host controller */
+		uint64_t t = ticks();
+		while (ticks() - t < 1920000)			/* 100 ms */
+			;
+		ufs_wr(REG_HCE, 1);			/* enable host controller */
+		t = ticks();
+		while (!(ufs_rd(REG_HCS) & HCS_DP) && ticks() - t < 19200000)
+			;
+		con_hex2("UFS RST", "hcs=", ufs_rd(REG_HCS), "hce=", ufs_rd(REG_HCE));
+
+		/* DME_POWERON: bring the device's power up */
+		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
+		ufs_wr(0x90, 0x10);			/* UIC_CMD_DME_POWERON */
+		t = ticks();
+		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)
+			;
+		con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+
+		/* DME_LINK_STARTUP: bring the UniPro link up */
+		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
+		ufs_wr(0x90, 0x16);			/* UIC_CMD_DME_LINK_STARTUP */
+		t = ticks();
+		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)
+			;
+		con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+
+		/* Re-take the transfer list (HCE reset cleared it) */
+		ufs_wr(REG_UTRLRSR, 0);
+		uintptr_t list = (uintptr_t)utrl;
+		ufs_wr(REG_UTRLBA, (uint32_t)list);
+		ufs_wr(REG_UTRLBAU, (uint32_t)(list >> 32));
+		ufs_wr(REG_UTRLRSR, 1);
+		con_hex2("UFS RST", "list=", ufs_rd(REG_UTRLBA), "rsr=", ufs_rd(REG_UTRLRSR));
+	}
+
 	/* fDeviceInit: the device accepts NOPs but refuses SCSI commands until
 	 * the host sets the DeviceInit flag (SET_FLAG query, idn 0x01) and the
 	 * device clears it when its bring-up is done - ufshcd's
