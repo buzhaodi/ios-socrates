@@ -293,7 +293,10 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	con_hex2("UFS Q", "ocs=", utrl[0].dw2 & 0xff, "is=", ufs_rd(REG_IS));
 	if (ucd.resp[0] != 0x36)
 		return 2;
-	return ucd.resp[12] ? 3 : 0;
+	/* The query response code lives in the header at [6]; [12] echoes the
+	 * opcode (0x06 for SET_FLAG, always nonzero). v12's rc=3 was a phantom.
+	 * 0xFF = UPIU_QUERY_RESP_GENERIC_FAILURE (enum ufs_query_response). */
+	return ucd.resp[6];		/* 0 = success, nonzero = the response code */
 }
 
 void test_ufs(void)
@@ -352,20 +355,29 @@ void test_ufs(void)
 	 * device clears it when its bring-up is done - ufshcd's
 	 * ufshcd_dev_link_startup does this exact dance. Our first-flash NOP
 	 * passed while every SCSI command CHECK-CONDITIONed. */
+	/* Read the flag first: if the ABL already initialized the device during
+	 * its boot, bDeviceInit is already cleared and SET_FLAG returns
+	 * GENERIC_FAILURE (0xFF) for an already-done operation. */
 	{
-		uint32_t rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit (write) */
-		con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
+		uint32_t rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit */
+		con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[16]);
 		dump_response("UFS DEVINI");
-		/* The device clears bDeviceInit when its bring-up is done; the flag
-		 * value comes back in the READ_FLAG response at [16]. */
-		for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
-			uint64_t t = ticks();			/* 50 ms at 19.2 MHz (delay_ms is shim.c's) */
-			while (ticks() - t < 960000)
-				;
-			rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit (read) */
+		if (rc || ucd.resp[16]) {		/* not set or error: try to set it */
+			rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit */
+			con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
+			dump_response("UFS DEVINI");
+			/* The device clears bDeviceInit when its bring-up is done. */
+			for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
+				uint64_t t = ticks();		/* 50 ms at 19.2 MHz */
+				while (ticks() - t < 960000)
+					;
+				rc = upiu_query(0x05, 0x01, 0x01);
+			}
+			con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
+			dump_response("UFS DEVINI");
+		} else {
+			con_str("UFS DEVINI", "already clear, skipping set");
 		}
-		con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
-		dump_response("UFS DEVINI");
 	}
 
 	con_hex2("UFS NOP", "rc=", nop_upiu(), "resp0=", ucd.resp[0]);
