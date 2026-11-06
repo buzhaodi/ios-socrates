@@ -191,10 +191,44 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Panel evidence: `DEVINI set rc=0`, `poll rc=0 flag=0`, `NOP rc=0 resp0=0x20`,
   `RLUNS rc=0 luns=6 first=0`, `SSU rc=0`, `TUR rc=0 ocs/st=0`
 
+### 2026-11-06 — M3 QEMU campaign: the kernel is GREEN in QEMU; three landmines defused (all payload-side)
+- Kernel: CI run 42197633756 (xnu-kernel artifact, sha d2e5ab94… supersededed by 3a137b2b…
+  after 0010/0012 were socratized - FB 0xb8000000, 1440x3200/5760; validate-repo green).
+  The ONLY kernel-side socrates work so far: patches 0010/0012 (early console). Everything
+  else in the 189-patch series runs as-is.
+- QEMU rounds (tools/qemu-sweet.py, virt board, 35GB RAM to cover dram 0x880000000):
+  - run1/2 PANIC pmap_map_bd "no PTE for vaddr 0xfffffe000c000000": the early io_map VA
+    window (arm_vm_init: 2MB + 10MB per 256MB of kernel RAM + the boot Video bytes) is too
+    small for the 45MB fbcon map - apollo only fit because it runs 1232MB of kernel RAM
+    (window 72MB). Discriminator proof: apollo's own FB constants panic at the IDENTICAL
+    VA in our harness.
+  - run3 PANIC same site with the ADT fbcon shrunk to the visible 18MB: backtrace
+    recovered from the intstack dump (qemu-sweet now saves pram.raw + kstatics.raw):
+    arm_init -> PE_create_console -> initialize_screen -> io_map. THREE maps share the
+    window: fbcon (ADT) + boot screen + text console (both Video.v_height*v_rowBytes).
+    Budget: 18MB + 2*V <= 22MB + V  =>  v_height=1024 (5.6MB) fits all three.
+  - run4 PANIC "Unable to find driver for this platform: D22AP": the M2 socrates pass had
+    replaced 'xiaomi,sweet' in the ADT root compatible - SweetPlatformExpert (xnu 0016)
+    matches ONLY that string. Restored; socrates/sm8550 ride along for identification.
+  - run5 abort in sweet_fb_probe (xnu 0125): it maps SM8250's MDP 0x0ae01000 - SM8550's
+    display engine lives elsewhere. cmdline sweetfb_probe=0 (the PORTING plan's own
+    pre-judgment, now proven).
+  - run6 GREEN, 60 s no panic: platform expert registered, the full SWEET driver set
+    (AKS/WDT/SURF/HID/battery/backlight), AppleCLCD "1440x1024 stride 5760 at 0xb8000000"
+    with a live 60Hz vsync heartbeat, VM bootstrap complete.
+- Fixes, all payload-side (no kernel rebuild): boot_args Video.v_height=1024 as the console
+  VA budget (loader.c + qemu-sweet.py), ADT root compatible keeps xiaomi,sweet, ADT
+  sweet-fbcon reg = the visible 18MB (not the 45MB window), cmdline sweetfb_probe=0.
+- The M3 flash image: shim/build-mac-xnu.sh -> out-mac/xnu-boot.img (21MB, sha 35d415a4…):
+  shim Image.gz + the SWEETXNU payload as the ramdisk (apollo's recipe) + the 8-block
+  socrates DTB blob.
+
 ### Next concrete actions
-1. (user) Photograph the lower half of the M2 panel — the partition list
-   (LUN0 capacity, MBR, GPT, partition names and sizes) for the campaign record.
-2. (decision) Kernel build: create the GitHub repo + push + run apollo's xnu.yml CI
-   (free on public repos), or install Xcode 15.4 locally.
-3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) — needs the
+1. (user) M3 flash: full Android boot once, unlock, ~30 s, then
+   `fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img`; photograph the panel.
+   Expect: the shim's red LOADER lines, then XNU clears the screen and paints kernel text
+   (fbcon); the boot ends in a panic or hang at the UFS/root stage (no iOS root on the
+   phone yet - M4).
+2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
+3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.

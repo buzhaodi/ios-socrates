@@ -127,7 +127,14 @@ const char *loader_boot(uintptr_t dtb)
 	ba->Video.v_display = 1;
 	ba->Video.v_rowBytes = FB_STRIDE;
 	ba->Video.v_width = FB_W;
-	ba->Video.v_height = FB_H;
+	/* v_height is the early-boot console VA BUDGET, not the panel: the io_map
+	 * early path serves the fbcon (ADT, 18MB), the boot screen and the text
+	 * console (both v_height*v_rowBytes) from a page-table window sized
+	 * 2MB + 10MB/256MB RAM + v_height*v_rowBytes (arm_vm_init). With 256MB
+	 * of kernel RAM the full 3200px panel mapped three times overflows it
+	 * (QEMU-proven pmap_map_bd panic); 1024px fits all three. AppleCLCD
+	 * gets the real geometry from the ADT (sweet-fbcon). */
+	ba->Video.v_height = 1024;
 	ba->Video.v_depth = 32;
 	ba->deviceTreeP = adt_pa - pa_of_va_base;	/* xnu reads it with the MMU on: a VA */
 	ba->deviceTreeLength = (uint32_t)p->adt_size;

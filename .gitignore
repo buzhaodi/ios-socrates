@@ -29,3 +29,4 @@ userland/metal2/turnip/out/
 research/
 xnu/out/
 shim/out/
+shim/out-mac/

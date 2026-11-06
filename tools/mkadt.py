@@ -71,7 +71,14 @@ GICD, GICD_SIZE = 0x17100000, 0x10000
 GICR, GICR_SIZE = 0x17180000, 0x200000
 # cont_splash_region 0xb8000000+0x2b00000 (the stock uefiplat "Display
 # Reserved" window; the mik60proios splash-injection tools use the same)
-FB, FB_SIZE = 0xb8000000, 0x2b00000
+# sweet-fbcon reg maps ONLY the visible panel (3200*5760 = 0x1194000). The full
+# cont_splash window is 0x2b00000 (45MB), but the early-boot io_map VA comes from a
+# tiny prebuilt page-table window (2MB + 10MB per 256MB of kernel RAM + the boot
+# video bytes; arm_vm_init.c), and the boot screen init maps the Video bytes too:
+# with 256MB of kernel RAM, a 45MB fbcon map + the screen map cannot both fit
+# (QEMU-proven: pmap_map_bd panic). apollo could map its whole 35MB splash window
+# only because it runs 1232MB of kernel RAM (window 72MB). FB stays the real base.
+FB, FB_SIZE = 0xb8000000, 3200 * 5760
 SWEET_ECID = 0x5357454554000001  # 'SWEET' + 1, synthetic
 # Redmi K60 Pro 1440x3200, a8r8g8b8
 FB_W, FB_H, FB_STRIDE = 1440, 3200, 1440 * 4
@@ -327,11 +334,13 @@ def build(seed=None, qemu=False, highmem=False, touch_fw=None, gmu_fw=None, gpu_
 
     # Identity of the iPhone X whose userland runs here: compatible[0] is
     # hw.model/hw.target (D22AP), model is hw.machine/hw.product
-    # (iPhone10,3). 'xiaomi,sweet' MUST stay — SweetPlatformExpert matches
-    # only that string (patch 0016). Keep apollo/sm8250 for identification.
+    # (iPhone10,3). 'xiaomi,sweet' MUST stay — SweetPlatformExpert (xnu 0016)
+    # matches ONLY that string; dropping it panics IOKit with
+    # 'Unable to find driver for this platform: D22AP' (QEMU-proven).
+    # socrates/sm8550 ride along for identification.
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,socrates') + cstr('qcom,sm8550') + cstr('AppleARM')),
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,sweet') + cstr('xiaomi,socrates') + cstr('qcom,sm8550') + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),

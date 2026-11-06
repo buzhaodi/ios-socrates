@@ -93,8 +93,19 @@ def build_image(payload):
         o = vmaddr + delta - phys_base
         img[o:o + fsize] = payload[foff:foff + fsize]
     img[adt_pa - phys_base:adt_pa - phys_base + adt_size] = payload[adt_off:adt_off + adt_size]
+    # boot_args Video: the early-boot io_map VA window is only
+    # 2MB + 10MB per 256MB of kernel RAM + the Video bytes (arm_vm_init.c), and
+    # THREE device maps come out of it before VM is up: the sweet fbcon (the
+    # ADT's visible panel bytes), the boot screen map and the text console map
+    # (both v_height * v_rowBytes each). With 256MB of kernel RAM the whole
+    # 3200px panel cannot fit three times over - so v_height is the console
+    # BUDGET, not the panel: 1024 * 5760 = 5.6MB gives fbcon 18MB + 5.6 + 5.6
+    # = 29MB inside the 32MB window (backtrace-proven: arm_init ->
+    # PE_create_console -> initialize_screen -> io_map panic when oversubscribed).
+    # The real geometry reaches the kernel through the ADT (sweet-fbcon).
+    VHEIGHT_CONSOLE_BUDGET = 1024
     ba = struct.pack('<HH4x4Q6QI4xQI', 2, 2, virt_base, phys_base, mem_size, top,
-                     FB_BASE, 1, FB_STRIDE, FB_W, FB_H, 32, 0, adt_pa - delta, adt_size)
+                     FB_BASE, 1, FB_STRIDE, FB_W, VHEIGHT_CONSOLE_BUDGET, 32, 0, adt_pa - delta, adt_size)
     ba += cmdline + b'\0' * 4 + struct.pack('<QQ', 0, mem_size)
     assert len(ba) == 736
     img[ba_pa - phys_base:ba_pa - phys_base + len(ba)] = ba
@@ -307,6 +318,12 @@ def main():
         result = {'status': 'qemu_exited', 'qemu_returncode': p.returncode}
         if p.poll() is None:
             _, regs, *extra = qmp(mon, 'stop', 'info registers', *a.hmp, pmemsave=(FB_BASE, FB_STRIDE * FB_H, f'{out}/fb.raw'))
+            # the kernel panic log (pram, carved by mkadt at the top of the dram range)
+            mem_size0 = struct.unpack_from('<Q', payload, 0x40 + 8)[0]
+            qmp(mon, pmemsave=(phys_base + 0x10000000 - 0x100000, 0x100000, f'{out}/pram.raw'))  # mkadt PANIC_LOG window
+            # kernel statics (VA 0xfffffe0007004000..0xfffffe00086c4000): stacks, globals, boot args
+            vb = struct.unpack_from('<Q', payload, 0x10)[0]
+            qmp(mon, pmemsave=(phys_base + 0x1000000, 0x1700000, f'{out}/kstatics.raw'))
             open(f'{out}/regs.txt', 'w').write(regs + ''.join(f'\n(qemu) {c}\n{r}' for c, r in zip(a.hmp, extra)))
             p.kill()
             p.wait()
