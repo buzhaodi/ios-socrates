@@ -418,14 +418,22 @@ void test_ufs(void)
 		/* DME_POWERON: bring the device's power up */
 		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
 		ufs_wr(0x90, 0x10);			/* UIC_CMD_DME_POWERON */
+		/* The UIC ready bit (0xA0 bit 0) is set when idle; a command makes it
+		 * drop. Wait for it to go low (command accepted) then high (done). */
 		t = ticks();
-		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)
+		while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)	/* wait drop: 100 ms */
+			;
+		t = ticks();
+		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)	/* wait rise: 1 s */
 			;
 		con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
 
 		/* DME_LINK_STARTUP: bring the UniPro link up */
 		ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
 		ufs_wr(0x90, 0x16);			/* UIC_CMD_DME_LINK_STARTUP */
+		t = ticks();
+		while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)
+			;
 		t = ticks();
 		while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)
 			;
@@ -452,7 +460,10 @@ void test_ufs(void)
 		uint32_t rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit */
 		con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[16]);
 		dump_response("UFS DEVINI");
-		if (rc || ucd.resp[16]) {		/* not set or error: try to set it */
+		if (1) {			/* v19: ALWAYS set after reset — the HCE reset may
+					 * have put the device back into "needs init" state
+					 * even with the flag reading 0 (v18's skip kept
+					 * TUR at 04/02). */
 			rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit */
 			con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
 			dump_response("UFS DEVINI");
