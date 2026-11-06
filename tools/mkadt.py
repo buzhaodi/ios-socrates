@@ -210,7 +210,14 @@ def build(seed=None, qemu=False, highmem=False, touch_fw=None, gmu_fw=None, gpu_
         cpu_nodes.append(node(f'cpu{core}', [
             ph(),
             ('device_type', cstr('cpu')),
-            ('compatible', cstr('qcom,kryo') + cstr('ARM,v8')),
+            # 'qcom,kryo470' is not a hardware fact here - it is the SweetCPU
+            # driver's match key (xnu 0018: IONameMatch='qcom,kryo470'; apollo's
+            # Mi 10T ADT ships the same string and its boots reach bsd_init).
+            # The socrates pass had 'corrected' it to 'qcom,kryo', which never
+            # matches: no CPU nub, no startAll, no gIOAllCPUInitializedKey, and
+            # the boot parks forever before IOFindBSDRoot (QEMU run6 + the M4
+            # phone photo show the same park).
+            ('compatible', cstr('qcom,kryo470') + cstr('ARM,v8')),
             ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
             ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
             ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology

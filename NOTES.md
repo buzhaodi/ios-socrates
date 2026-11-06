@@ -2,22 +2,27 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-06 ~22:00): M3 CLOSED on hardware; M4 probe image BUILT and verified (sha 45323896…) — flash it; repo now pushes to buzhaodi/ios-socrates only <<<
+### >>> SOCRATES (2026-11-06 ~23:30): THE PRE-BSD PARK ROOT-CAUSED — /cpus compatible must be 'qcom,kryo470' (the SweetCPU match key, not a hw fact); new image cdc2ca40… QEMU-proven to reach IOFindBSDRoot <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Remotes consolidated (user 2026-11-06): a single origin -> https://github.com/buzhaodi/ios-socrates.git;
-  the apollo/ios-sweet remotes are gone. CI builds run there (xnu.yml fires only when
-  xnu/patches/** changes - the M4 work touches none of it).
-- M3 flash #2 was GREEN (photo-decoded: full SWEET driver set, AppleCLCD 1440x1024@0xb8000000,
-  live 60Hz vsync - see the campaign log).
-- M4 probe image: shim runs the M2 UFS wake recipe before jumping to XNU (ufs_wake_for_kernel,
-  extracted from test_ufs with no sequence change); payload cmdline now rd=ufsroot0; the kernel
-  (xnu 0028 sweet_ufs.c, unchanged) should print `SWEET UFS: "userdata" on LUN 0: ...` and
-  then fail mounting (userdata is f2fs) - that mountroot panic IS the probe success.
-- NEXT: (user) flash shim/out-mac/xnu-boot.img (sha 45323896…) and photograph the panel:
-  red wake lines + the kernel SWEET UFS line. Then M0 backups, then the real iOS root into
-  userdata - the destructive step, explicit user confirmation required (AGENTS.md).
+- The M4 probe flash #1 photo: kernel alive to the driver set + heartbeats, then parked forever
+  before IOFindBSDRoot - the SAME park in QEMU (30/120/300 s), so a payload bug, not hardware.
+- ROOT CAUSE: the socrates constants pass changed the ADT /cpus compatible from upstream's
+  'qcom,kryo470' to 'qcom,kryo' - but kryo470 is the SweetCPU driver's IONameMatch (xnu 0018;
+  apollo's real ADT ships it). Without the match: no CPU nub, no startAll (xnu 0065), no
+  gIOAllCPUInitializedKey, and bsd_init never runs. QEMU run6's "60 s green" was parked-green.
+  M3's evidence (fbcon, drivers, 60 Hz vsync) all still stands - it just hid this bug behind it.
+- Fixed in mkadt.py; ADTs + payloads + image rebuilt. QEMU proof (qemu-m4-fix, 90 s): the
+  kernel now reaches bsd_init and panics with the DESIGNED message - 'SWEET UFS: no
+  /sweet-ufs node in the device tree' -> 'IOFindBSDRoot: SWEET UFS root ufsroot0 unavailable'
+  (QEMU's ADT has no UFS node; on the phone /sweet-ufs exists, so the same path should report
+  the userdata partition instead).
+- NEW flash image: shim/out-mac/xnu-boot.img, sha256 cdc2ca4066f80955f121c70aabc09447aeb4053b
+  e53a20a799e93b58926c8008. Verified inside: shim UFS wake + rd=ufsroot0 + kryo470 x8.
+- NEXT: (user) flash #2 same drill; photograph the panel (expect the SWEET UFS line or the
+  kernel's UFS diagnostic). Then M0 backups, then the iOS root into userdata (destructive,
+  explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

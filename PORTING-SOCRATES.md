@@ -321,10 +321,39 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   (user 2026-11-06: all changes and the CI builds live there; the old apollo/ios-sweet
   remotes removed). README status table updated: M3 done on hardware, M4 in progress.
 
+### 2026-11-06 — M4 flash #1 + the ROOT CAUSE of the pre-BSD park: 'qcom,kryo' vs 'qcom,kryo470'
+
+- The M4 probe flash (image 45323896…) photo: kernel text to the full SWEET driver set
+  + AppleCLCD + heartbeats at 10 s and 20 s — ALIVE (600 vsyncs, 0 skipped), no panic,
+  but NO SWEET UFS / BSD root lines: IOFindBSDRoot never ran. The red UFS WAKE lines are
+  invisible by design (fbcon clears the shim stage) — the wake itself is unproven either
+  way; evidence for it should ride in the kernel's probe output next flash.
+- The park reproduced EXACTLY in QEMU (30/120/300 s: driver set then heartbeats forever,
+  panic log empty, CPU on timer IRQs) — so it was never a QEMU artifact but a payload bug.
+- Root cause (code-reading): the socrates constants pass (95d275f) "corrected" the /cpus
+  compatible from upstream's 'qcom,kryo470' to 'qcom,kryo'. 'kryo470' is NOT a hardware
+  fact — it is the SweetCPU driver's match key (xnu 0018: IONameMatch='qcom,kryo470';
+  apollo's real Mi 10T ADT ships the same string and boots to iOS). With 'qcom,kryo':
+  no CPU nub matches -> startAll (xnu 0065) never runs -> gIOAllCPUInitializedKey never
+  publishes -> the boot parks between the driver set and bsd_init FOREVER. QEMU run6's
+  "60 s green" was green-but-parked; the M3 milestone (fbcon, drivers, vsync) stands,
+  but the park hid everything after it.
+- Fix: mkadt.py /cpus compatible back to 'qcom,kryo470' (comment in place). Both ADTs
+  and payloads rebuilt.
+- Proof, QEMU (qemu-m4-fix, 90 s): the kernel now reaches bsd_init and panics EXACTLY as
+  designed: 'SWEET UFS: no /sweet-ufs node in the device tree' ->
+  'panic(cpu 0): IOFindBSDRoot: SWEET UFS root ufsroot0 unavailable: 6' (the QEMU ADT
+  has no UFS node - correct behavior there). On the phone, /sweet-ufs IS in the ADT, so
+  the same path should print 'SWEET UFS: "userdata" on LUN 0: ...' instead.
+- New flash image: shim/out-mac/xnu-boot.img sha cdc2ca4066f80955f121c70aabc09447aeb4053b
+  e53a20a799e93b58926c8008 (shim wake + rd=ufsroot0 + kryo470 x8 verified inside).
+
 ### Next concrete actions
-1. (user) M4 probe flash, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 45323896…): full Android boot once, unlock, ~30 s, `fastboot boot` it, photograph
-   the panel — red wake lines AND the kernel SWEET UFS line if it works.
+1. (user) M4 probe flash #2, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha cdc2ca40…): same drill (Android boot once, unlock, ~30 s, fastboot boot, photo).
+   Expect either 'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' + a
+   mountroot panic (PROBE SUCCESS), or the UFS diagnostic line saying what the kernel
+   found instead (host not ready / no GPT / etc.) — either way the path is now exercised.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
