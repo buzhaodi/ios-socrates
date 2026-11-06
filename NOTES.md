@@ -2,19 +2,24 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-06 ~20:00, after the first M3 flash photo): flashed image was a stale-shim hybrid; REAL fixed image built (cfc40eb2…), re-flash pending <<<
+### >>> SOCRATES (2026-11-06 ~21:00): M3 DONE ON HARDWARE — flash #2 GREEN (no panic, 60Hz vsync live on the panel); next = M4 probe image (rd=ufsroot0) <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- First M3 flash panicked at the QEMU-known site (`pmap_map_bd`, same caller 0xfffffe0007baf060):
-  `out-mac/xnu-boot.img` packed the PRE-fix shim (Image.gz built 17:08, v_height=3200 baked in)
-  with the POST-fix payload. QEMU never sees the shim loader (qemu-sweet builds boot_args in
-  python), so run6's green was real but didn't cover the loader half.
-- Rebuilt everything; verified inside the final image (disassembly + ADT bytes). NEW flash image:
-  `~/gittest/ios-socrates/shim/out-mac/xnu-boot.img`, sha256 cfc40eb205c4968062afacfd86ca912088f794fa0ba7fef16ad97844c28fdd92.
-  build-mac-xnu.sh now refuses stale shims/payloads (mtime gate, both directions tested).
-- NEXT: re-flash (Android boot once, unlock, ~30 s, `fastboot boot .../xnu-boot.img`,
-  photo the panel). Then M0 backups, then M4 (iOS root into userdata).
+- M3 CLOSED: flash #1 panicked at the QEMU-known pmap_map_bd site because the packed image
+  mixed the PRE-fix shim with the POST-fix payload (details + forensics in the campaign log).
+  Rebuilt + mtime-gated build-mac-xnu.sh (refuses stale shim/payload; commit 13df690),
+  out-mac/* untracked).
+- Flash #2 (sha cfc40eb2…): GREEN, photo-OCR decoded — Darwin banner to VM bootstrap, the
+  full SWEET driver set registered, `AppleCLCD 1440x1024 stride 5760 at 0xb8000000`, and
+  `600 vsyncs, 0 skipped, latest 1.8 ms late` = the 60 Hz display interrupt is LIVE on
+  real hardware (GICv3 + timer + DPU). M3 done on the phone, not just in QEMU.
+- NEXT (M4 probe): add `rd=ufsroot0` to the payload cmdline; the kernel UFS root driver
+  (xnu 0028, bsd/dev/sweet_ufs.c) reuses the bootloader's live link, so the SHIM must run
+  the M2 wake-up recipe before jumping to XNU. Partition by boot-arg ufsroot= (default
+  "userdata"), root device rd=ufsroot0, mkadt.py already emits /sweet-ufs (0x1d84000).
+- AFTER THAT: M0 backups (recovery image, non-destructive), then the real iOS root into
+  userdata — the one destructive step, explicit user confirmation required (AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

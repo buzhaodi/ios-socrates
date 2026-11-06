@@ -245,15 +245,48 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Process fix: build-mac-xnu.sh now refuses to pack when out-mac/Image.gz is older than any
   shim source, or the payload older than mkadt.py/mkpayload.py (tested both directions).
 
+### 2026-11-06 — M3 DONE ON HARDWARE: the re-flash is GREEN (photo-decoded)
+
+- Flash #2 (image cfc40eb2…, the rebuilt one): **no panic anywhere on the panel.** OCR of
+  the photo, top to bottom: Darwin banner (xnu-8796.141.3), VM bootstrap done (85 maps,
+  165 entries, 501 holes left), RTM/scheduler/telemetry, SWEET PRNG + pthread + AMFI
+  registered, SWEET platform expert registered + device-tree expert started, the full
+  SWEET driver set (AKS/WDT/SURF/HID buttons+touch/BATTERY/BL), then the M3 finish line:
+  - `SWEET FB: AppleCLCD 1440x1024 stride 5760 at 0xb8000000` — the console-budget fix
+    live on hardware (1024 = the io_map budget; the real 3200 geometry comes from the ADT).
+  - `SWEET FB: 19.8 s: iOS gave 9 frames, 9 reached the panel; 600 vsyncs, 0 skipped,
+    latest 1.8 ms late` — the 60 Hz vsync interrupt is LIVE on hardware: GICv3 routing,
+    arch timer and the display engine all work on the real SM8550. More than QEMU proved.
+- The kernel idles at the vsync heartbeat by design: the UFS root probe only runs with
+  boot-arg rd=ufsroot0, which this M3 payload's cmdline does not carry. Nothing was
+  exercised past bootstrap - that is M4.
+- M4 facts pinned down while reading xnu 0028 (bsd/dev/sweet_ufs.c):
+  - The kernel driver REUSES the bootloader's live UFS link (HCE/DP/UTRLRDY checked,
+    transfer list re-taken, TUR with 3 unit-attention retries) — it does NOT bring the
+    device up itself. On socrates the ABL leaves the link in a different state than the
+    shim's wake-up recipe produces, so the plan: the SHIM performs the full M2 recipe
+    (HCE reset + DME_POWERON + DME_LINK_STARTUP + bDeviceInit), reads GPT, and only then
+    hands the live link to the kernel — the kernel-side 0028 code stays untouched.
+    A kernel-side fallback (port the recipe into ufs_take_over_host) only if the link
+    does not survive the handoff.
+  - Partition choice: `ufsroot=` boot-arg, default "userdata"; root device rd=ufsroot0.
+    mkadt.py already builds the /sweet-ufs node (HC 0x1d84000); 0029 unsealed-root mounts
+    the real iOS root from it.
+  - The next flash should add `rd=ufsroot0` to the cmdline (mkpayload.py) to light up
+    `SWEET UFS: "userdata" on LUN 0: first block ... read-only` on the panel — that is
+    the M4 probe, no iOS root required yet.
+
 ### Next concrete actions
-1. (user) M3 flash #2, same image path (now the REAL fixed image, sha cfc40eb2…):
-   full Android boot once, unlock, ~30 s, then
-   `fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img`; photograph the panel.
-   Expect: shim red LOADER lines, then XNU clears the screen and paints kernel text; the
-   boot then panics or hangs at the UFS/root stage (no iOS root yet — M4). If the panel
-   instead shows the SAME pmap panic again with h=0xc80, the phone is running something
-   other than this image — check `fastboot boot` actually re-downloaded (one boot per
-   bootloader session; `fastboot reboot bootloader` between attempts).
-2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
-3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
+1. (agent) M4 probe image: add `rd=ufsroot0` to the payload cmdline (mkpayload.py) and have
+   the SHIM run the full M2 UFS wake-up recipe before jumping to XNU (the kernel's
+   ufs_take_over_host expects a live link). Rebuild, verify, hand to the user.
+2. (user) Flash the M4 probe image the same way (Android boot once, unlock, ~30 s,
+   `fastboot boot .../xnu-boot.img`, photo the panel). Green looks like:
+   `SWEET UFS: "userdata" on LUN 0: first block 0x..., NNNN MiB, read-only` + a root-mount
+   panic (no iOS root in userdata yet — expected).
+3. (user) Photograph the lower half of the M2 panel — the partition list for the record.
+4. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
+5. (agent) M4 proper: build the iOS root (tools/build-ios-root.sh, iPhone X 16.7.16 IPSW,
+   needs Linux/WSL + ~40 GB) and write it into userdata - ONLY with the user's explicit
+   confirmation at that destructive step (AGENTS.md rule).
