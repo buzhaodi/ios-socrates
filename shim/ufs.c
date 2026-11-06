@@ -252,6 +252,20 @@ void test_ufs(void)
 		return;
 	}
 
+	/* UFSHCI 4.0 (SM8550): the ABL may hand us the host in MCQ mode -
+	 * REG_UFS_MEM_CFG 0x300 bit 0 = MCQ_MODE_SELECT (include/ufs/ufshci.h).
+	 * In MCQ mode the legacy doorbell auto-completes with synthesized
+	 * UPIU-shaped responses: our first-flash TURs came back instantly with
+	 * the tag echoed, SCSI status 2 and NO sense bytes at all (and the NOP
+	 * OUT got a RESPONSE UPIU instead of a NOP IN). Switch back to legacy.
+	 */
+	uint32_t mem_cfg = ufs_rd(0x300);
+	con_hex2("UFS MODE", "mem_cfg=", mem_cfg, "mcq_cfg=", ufs_rd(0x380));
+	if (mem_cfg & 1) {
+		ufs_wr(0x300, mem_cfg & ~1u);
+		con_hex2("UFS MODE", "->legacy=", ufs_rd(0x300), "was=", mem_cfg);
+	}
+
 	/* Take over the transfer request list: stop, point at ours, run. */
 	ufs_wr(REG_UTRLRSR, 0);
 	uintptr_t list = (uintptr_t)utrl;
