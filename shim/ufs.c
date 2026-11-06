@@ -277,6 +277,18 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 			return 1;
 		}
 	}
+	/* v10 evidence: OCS was still the 0x0F sentinel after the doorbell
+	 * cleared - the controller accepts the doorbell immediately but the
+	 * UTRD only completes when OCS is written back. SCSI and NOP finish
+	 * fast enough to read in time; a query goes through the device
+	 * management layer and takes longer. Poll OCS off the sentinel. */
+	while ((utrl[0].dw2 & 0xff) == 0x0f) {
+		if (ticks() - start > 19200000 * 5) {	/* 5 s */
+			con_hex2("UFS Q", "ocs stuck 0F, is=", ufs_rd(REG_IS), "db=", ufs_rd(REG_UTRLDBR));
+			ufs_wr(REG_UTRLCLR, ~1u);
+			return 1;
+		}
+	}
 	__asm__ volatile("dsb sy" ::: "memory");
 	con_hex2("UFS Q", "ocs=", utrl[0].dw2 & 0xff, "is=", ufs_rd(REG_IS));
 	if (ucd.resp[0] != 0x36)
