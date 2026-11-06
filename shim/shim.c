@@ -53,6 +53,17 @@
 #define wsr(r, v) __asm__ volatile("msr " r ", %0" : : "r"((uint64_t)(v)))
 #define isb() __asm__ volatile("isb" ::: "memory")
 
+/* freestanding: clang lowers __builtin_strcmp (ufs.c's list_partitions)
+ * to a libc call; the shim carries no libc, so here it is. */
+int strcmp(const char *a, const char *b)
+{
+	while (*a && *a == *b) {
+		a++;
+		b++;
+	}
+	return (int)(uint8_t)*a - (int)(uint8_t)*b;
+}
+
 static inline uint32_t rd32(uintptr_t a) { return *(volatile uint32_t *)a; }
 static inline uint64_t rd64(uintptr_t a) { return *(volatile uint64_t *)a; }
 static inline void wr32(uintptr_t a, uint32_t v) { *(volatile uint32_t *)a = v; }
@@ -145,11 +156,16 @@ void exc_handler(uint64_t slot, uint64_t *regs)
 		return;
 	}
 	con_clear(BLUE);
-	switch (slot & 3) {
-	case 0: con_str("PANIC", "SYNC"); break;
-	case 1: con_str("PANIC", "IRQ"); break;
-	case 2: con_str("PANIC", "FIQ"); break;
-	default: con_str("PANIC", "SERROR"); break;
+	/* A char array, not four string literals through a switch: clang's
+	 * switch/lookup-table transform materializes string pointers as a
+	 * .rodata table (R_AARCH64_ABS64); the ABL runs the image wherever it
+	 * was loaded with no relocation pass, so the build refuses absolute
+	 * relocations in C objects. An indexed char[4][8] carries no pointers. */
+	{
+		static const char kind_names[4][8] = {
+			"SYNC", "IRQ", "FIQ", "SERROR"
+		};
+		con_str("PANIC", kind_names[slot & 3]);
 	}
 	con_hex2("SLOT", "n=", slot, "cpu=", rsr("mpidr_el1"));
 	con_str("STAGE", stage);

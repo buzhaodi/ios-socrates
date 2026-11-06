@@ -141,11 +141,28 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   Mac clang/ld.lld adaptation of shim/build.sh) and the kernel build path is undecided
   (GitHub Actions like apollo — needs this repo pushed — vs local Xcode 15.4).
 
+### 2026-11-06 — the shim builds on the Mac; the M1 image is ready to flash
+- shim/build-mac.sh: apollo's build.sh ported to homebrew clang + lld (WSL gcc not needed).
+  Two clang-vs-gcc differences fixed in source, both documented in the script:
+  clang's switch/lookup-table transform materialized the exception-name strings as an
+  R_AARCH64_ABS64 .rodata pointer table (the shim forbids absolute relocations - the ABL
+  runs the image unrelocated) -> char[4][8] array instead; and __builtin_strcmp became a
+  libc call -> a freestanding strcmp in shim.c. _end parses via python (macOS awk has no
+  strtonum).
+- The M1 flash image: shim Image (184,320 B) + the 8-block splash-injected socrates vendor
+  DTB blob (mik60proios tools' output, copied to research/dtb/, gitignored) + a
+  deterministic empty newc ramdisk, Android boot header v0 (the header the K60 Pro's ABL
+  has accepted all campaign long). tools/mkbootimg_v0.py borrowed from ios-beryllium.
+  build-mac.sh is byte-reproducible: shim-boot.img sha256 0b3687061765068c.
+- One flash covers M1 AND M2: the shim paints its probe report on the panel (CPU feature
+  registers, PSCI/SMCCC, 8-core PSCI CPU_ON, GICv3 vtimer IRQ, the UFS probe + partition
+  list) - and the socrates memory constants get their first hardware proof. A fault
+  paints a blue panic screen with the exception context.
+
 ### Next concrete actions
-1. (decision) Kernel build: create the GitHub repo + push + run apollo's xnu.yml CI
+1. (user) Flash shim/out-mac/shim-boot.img (full Android boot first, one fastboot boot
+   per bootloader session) and photograph the panel - the M1/M2 evidence.
+2. (decision) Kernel build: create the GitHub repo + push + run apollo's xnu.yml CI
    (free on public repos), or install Xcode 15.4 locally.
-2. (agent) Shim build toolchain: WSL gcc-aarch64-linux-gnu or Mac clang+lld; then the M1
-   boot image (the socrates twist: the 8-block vendor DTB table + per-block splash
-   injection — mik60proios/tools/inject-nodes-mac.sh is the working reference).
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) — needs the
    phone at hand; nothing destructive.
