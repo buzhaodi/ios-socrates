@@ -299,6 +299,53 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	return ucd.resp[6];		/* 0 = success, nonzero = the response code */
 }
 
+/* WRITE_ATTR / SET_FLAG with a value: the osf3 field at [19..22] carries
+ * the 4-byte value big-endian (Linux: osf3 = cpu_to_be32(value << 16)
+ * for attributes). */
+static uint32_t upiu_query_val(uint8_t opcode, uint8_t idn, uint8_t qfunc, uint32_t value)
+{
+	static uint8_t tag;
+	zero(&utrl[0], sizeof(utrl[0]));
+	zero(&ucd, sizeof(ucd));
+	ucd.cmd[0] = 0x16;
+	ucd.cmd[2] = 0xd0;
+	ucd.cmd[3] = ++tag;
+	ucd.cmd[4] = 0x02;
+	ucd.cmd[5] = qfunc;
+	ucd.cmd[12] = opcode;
+	ucd.cmd[13] = idn;
+	ucd.cmd[19] = value >> 24;
+	ucd.cmd[20] = value >> 16;
+	ucd.cmd[21] = value >> 8;
+	ucd.cmd[22] = value;
+	uintptr_t ucd_pa = (uintptr_t)&ucd;
+	utrl[0].dw0 = (1u << 28) | (1u << 24);
+	utrl[0].dw2 = 0x0f;
+	utrl[0].ucdba = (uint32_t)ucd_pa;
+	utrl[0].ucdbau = (uint32_t)(ucd_pa >> 32);
+	utrl[0].resp = (512u / 4) << 16 | (512u / 4);
+	__asm__ volatile("dsb sy" ::: "memory");
+	ufs_wr(REG_UTRLDBR, 1);
+	uint64_t start = ticks();
+	while (ufs_rd(REG_UTRLDBR) & 1) {
+		if (ticks() - start > 19200000) {
+			ufs_wr(REG_UTRLCLR, ~1u);
+			return 1;
+		}
+	}
+	while ((utrl[0].dw2 & 0xff) == 0x0f) {
+		if (ticks() - start > 19200000 * 5) {
+			ufs_wr(REG_UTRLCLR, ~1u);
+			return 1;
+		}
+	}
+	__asm__ volatile("dsb sy" ::: "memory");
+	con_hex2("UFS Q", "ocs=", utrl[0].dw2 & 0xff, "is=", ufs_rd(REG_IS));
+	if (ucd.resp[0] != 0x36)
+		return 2;
+	return ucd.resp[6];
+}
+
 void test_ufs(void)
 {
 	con_str("UFS", "milestone 5 probe (read-only)");
@@ -413,10 +460,30 @@ void test_ufs(void)
 		    "r1=", ucd.resp[4] | ucd.resp[5] << 8 | ucd.resp[6] << 16 | ucd.resp[7] << 24);
 		/* The attribute value (2 bytes BE) lives in osf3 at [19..20],
 		 * not [15..16] (those are index/selector echoes). */
-		con_hex2("UFS ATTR", "val=", ucd.resp[19] | ucd.resp[20] << 8,
+		con_hex2("UFS ATTR", "val=", (ucd.resp[19] << 8) | ucd.resp[20],
 		    "body=", ucd.resp[16] | ucd.resp[17] << 8 | ucd.resp[18] << 16 | ucd.resp[19] << 24);
 	}
 
+	/* v16's panel: bBootLUNEn = 0 (boot LU disabled by the ABL) and
+	 * bPowerMode = 0 (inactive). Re-enable the boot LU and force ACTIVE. */
+	{
+		uint32_t rc = upiu_query_val(0x04, 0x00, 0x81, 1 << 16);  /* WRITE_ATTR bBootLUNEn=1 */
+		con_hex2("UFS SETBL", "rc=", rc, "resp0=", ucd.resp[0]);
+		dump_response("UFS SETBL");
+		rc = upiu_query(0x03, 0x00, 0x01);	/* re-READ bBootLUNEn */
+		con_hex2("UFS SETBL", "read rc=", rc, "val=", (ucd.resp[19] << 8) | ucd.resp[20]);
+	}
+
+	/* SSU with POWER_CONDITION = ACTIVE (bits 7:4 of byte 4 = 1), not
+	 * START_VALID (0) — the 05/24 INVALID FIELD IN CDB on every prior SSU
+	 * points at the power condition field. */
+	static const uint8_t ssu_a[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
+	rc = scsi(0, ssu_a, sizeof(ssu_a), 0, 0, &ocs, &st);
+	con_hex2("UFS SSU_A", "rc=", rc, "ocs/st=", ocs << 8 | st);
+	if (rc == 4)
+		dump_response("UFS SSU_A");
+
+	/* And the traditional SSU (START_VALID, START=1) after the re-enable. */
 	static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 1, 0 };
 	rc = scsi(0, ssu, sizeof(ssu), 0, 0, &ocs, &st);
 	con_hex2("UFS SSU", "rc=", rc, "ocs/st=", ocs << 8 | st);
