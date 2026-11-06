@@ -192,6 +192,47 @@ static void list_partitions(uint32_t entry_lba, uint32_t nent)
 	}
 }
 
+/* Sense dump: the response UPIU after a CHECK CONDITION carries the sense
+ * at byte 16 - the key/ASC/ASCQ says exactly why the device refused. */
+static void dump_response(const char *tag)
+{
+	const volatile uint8_t *r = ucd.resp;
+	con_hex2(tag, "r0=", r[0] | r[1] << 8 | r[2] << 16 | r[3] << 24,
+	    "r1=", r[4] | r[5] << 8 | r[6] << 16 | r[7] << 24);
+	con_hex2(tag, "r2=", r[8] | r[9] << 8 | r[10] << 16 | r[11] << 24,
+	    "r3=", r[12] | r[13] << 8 | r[14] << 16 | r[15] << 24);
+	con_hex2(tag, "sns=", r[16] | r[17] << 8 | r[18] << 16 | r[19] << 24,
+	    "asc=", r[20] | r[21] << 8 | r[22] << 16 | r[23] << 24);
+}
+
+/* NOP OUT: the UFS-native ping. Completing with a NOP IN (0x22) proves the
+ * link and the command pipeline without any SCSI. */
+static uint32_t nop_upiu(void)
+{
+	static uint8_t tag;
+	zero(&utrl[0], sizeof(utrl[0]));
+	zero(&ucd, sizeof(ucd));
+	ucd.cmd[0] = 0x00;			/* transaction type: NOP OUT */
+	ucd.cmd[3] = 0x80 + ++tag;
+	uintptr_t ucd_pa = (uintptr_t)&ucd;
+	utrl[0].dw0 = (1u << 28) | (1u << 24);	/* UFS storage, no data */
+	utrl[0].dw2 = 0x0f;
+	utrl[0].ucdba = (uint32_t)ucd_pa;
+	utrl[0].ucdbau = (uint32_t)(ucd_pa >> 32);
+	utrl[0].resp = (512u / 4) << 16 | (512u / 4);
+	__asm__ volatile("dsb sy" ::: "memory");
+	ufs_wr(REG_UTRLDBR, 1);
+	uint64_t start = ticks();
+	while (ufs_rd(REG_UTRLDBR) & 1) {
+		if (ticks() - start > 19200000) {
+			ufs_wr(REG_UTRLCLR, ~1u);
+			return 1;
+		}
+	}
+	__asm__ volatile("dsb sy" ::: "memory");
+	return ucd.resp[0] == 0x22 ? 0 : 2;	/* 0 = NOP IN came back */
+}
+
 void test_ufs(void)
 {
 	con_str("UFS", "milestone 5 probe (read-only)");
@@ -228,6 +269,9 @@ void test_ufs(void)
 		return;
 	}
 
+	con_hex2("UFS NOP", "rc=", nop_upiu(), "resp0=", ucd.resp[0]);
+	dump_response("UFS NOP");
+
 	uint32_t ocs = 0, st = 0, rc;
 	static const uint8_t tur[6] = { 0x00 };
 	/* A first command may report a unit attention; retry a few times. */
@@ -236,6 +280,13 @@ void test_ufs(void)
 		con_hex2("UFS TUR", "rc=", rc, "ocs/st=", ocs << 8 | st);
 		if (!rc)
 			break;
+	}
+	if (rc == 4) {
+		dump_response("UFS TUR");
+		rc = scsi(1, tur, sizeof(tur), 0, 0, &ocs, &st);
+		con_hex2("UFS TUR1", "rc=", rc, "ocs/st=", ocs << 8 | st);
+		if (rc == 4)
+			dump_response("UFS TUR1");
 	}
 
 	static const uint8_t cap10[10] = { 0x25 };	/* READ CAPACITY(10) */
