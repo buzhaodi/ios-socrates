@@ -411,8 +411,10 @@ void test_ufs(void)
 		con_hex2("UFS ATTR", "idn=", idn, "rc=", rc);
 		con_hex2("UFS ATTR", "r0=", ucd.resp[0] | ucd.resp[1] << 8 | ucd.resp[2] << 16 | ucd.resp[3] << 24,
 		    "r1=", ucd.resp[4] | ucd.resp[5] << 8 | ucd.resp[6] << 16 | ucd.resp[7] << 24);
-		con_hex2("UFS ATTR", "val16=", ucd.resp[15] | ucd.resp[16] << 8,
-		    "r12=", ucd.resp[12] | ucd.resp[13] << 8 | ucd.resp[14] << 16 | ucd.resp[15] << 24);
+		/* The attribute value (2 bytes BE) lives in osf3 at [19..20],
+		 * not [15..16] (those are index/selector echoes). */
+		con_hex2("UFS ATTR", "val=", ucd.resp[19] | ucd.resp[20] << 8,
+		    "body=", ucd.resp[16] | ucd.resp[17] << 8 | ucd.resp[18] << 16 | ucd.resp[19] << 24);
 	}
 
 	static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 1, 0 };
