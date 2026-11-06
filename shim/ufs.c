@@ -251,7 +251,11 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	ucd.cmd[0] = 0x16;			/* QUERY REQUEST */
 	ucd.cmd[2] = 0xd0;			/* the UFS DEVICE W-LUN (ufshcd's target) */
 	ucd.cmd[3] = ++tag;
-	ucd.cmd[4] = qfunc;
+	/* The canonical UPIU header (include/uapi/scsi/scsi_bsg_ufs.h):
+	 * byte 4 = command_set_type (low nibble) | iid, byte 5 = query_function.
+	 * v7 wrote qfunc into byte 4 - a garbage command set type, dropped. */
+	ucd.cmd[4] = 0x02;			/* command_set_type = QUERY */
+	ucd.cmd[5] = qfunc;			/* 0x81 STD WRITE / 0x01 STD READ */
 	ucd.cmd[12] = opcode;
 	ucd.cmd[13] = idn;
 	uintptr_t ucd_pa = (uintptr_t)&ucd;
