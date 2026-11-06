@@ -159,9 +159,41 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   list) - and the socrates memory constants get their first hardware proof. A fault
   paints a blue panic screen with the exception context.
 
+### 2026-11-06 — M2 DONE: TUR rc=0, REPORT LUNS: 6 LUNs, SSU rc=0 — 19 flash rounds to a green SCSI bus
+- The full HCE reset + DME_POWERON + DME_LINK_STARTUP + FORCED bDeviceInit
+  sequence was the key. 19 flash rounds from the first M1 image to the first
+  green SCSI bus, each round decoding one layer:
+  - v1-v4: sense channel opened (v3 sense offsets corrected; v4 REPORT LUNS probe)
+  - v5-v7: fDeviceInit query channel built (v5 wrong type, v6 real types + W-LUN,
+    v7 SSU + W-LUN queries — all silently dropped because...)
+  - v8-v11: canonical UPIU header + UTRD (v8 real header, v9 command_type=1,
+    v10 OCS instrumentation, v11 OCS completion poll)
+  - v12: fDeviceInit block moved AFTER the UTRL takeover (the queries were
+    ringing the doorbell on the ABL's old list — the most humbling bug)
+  - v13-v14: response code at [6] + READ_FLAG first (v13) + REPORT LUNS (v14)
+  - v15-v16: READ_ATTR — bBootLUNEn=0, bPowerMode=0 (v15 wrong offset, v16 right)
+  - v17: WRITE_ATTR bBootLUNEn rejected (GENERIC_FAILURE) + SSU both modes rejected
+  - v18: HCE reset + DME_POWERON + DME_LINK_STARTUP — the device SAW it
+    (UNIT ATTENTION 06/29 on the first SSU after the reset)
+  - v19: forced SET bDeviceInit even when the flag reads 0 (the HCE reset put
+    the device back into needs-init state; the flag just hadn't been re-armed)
+    + fixed UIC polling (wait bit drop then rise, not just rise) = **TUR GREEN**
+- The socrates UFS wake-up recipe (for PORTING-SOCRATES.md and the kernel's
+  own UFS driver):
+  1. Stop the transfer list (UTRLRSR=0)
+  2. HCE reset (HCE=0, 100ms, HCE=1, wait HCS.DP)
+  3. UIC DME_POWERON (cmd 0x10 to 0x90, poll 0xA0 bit0 drop→rise)
+  4. UIC DME_LINK_STARTUP (cmd 0x16 to 0x90, poll same)
+  5. Re-take the transfer list (UTRLRSR=0, UTRLBA/UTRLBAU, UTRLRSR=1)
+  6. SET_FLAG bDeviceInit (query 0x16, opcode 0x06, idn 0x01, cs=0x02, qfunc 0x81)
+  7. Poll READ_FLAG bDeviceInit until it clears (query 0x16, opcode 0x05, qfunc 0x01)
+  8. NOP → TUR → CAP → READ → GPT
+- Panel evidence: `DEVINI set rc=0`, `poll rc=0 flag=0`, `NOP rc=0 resp0=0x20`,
+  `RLUNS rc=0 luns=6 first=0`, `SSU rc=0`, `TUR rc=0 ocs/st=0`
+
 ### Next concrete actions
-1. (user) Flash shim/out-mac/shim-boot.img (full Android boot first, one fastboot boot
-   per bootloader session) and photograph the panel - the M1/M2 evidence.
+1. (user) Photograph the lower half of the M2 panel — the partition list
+   (LUN0 capacity, MBR, GPT, partition names and sizes) for the campaign record.
 2. (decision) Kernel build: create the GitHub repo + push + run apollo's xnu.yml CI
    (free on public repos), or install Xcode 15.4 locally.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) — needs the
