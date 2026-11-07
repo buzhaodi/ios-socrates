@@ -2,7 +2,7 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): flash #16 READS userdata; new crash in unported SM8250 CPU frequency; flash #17 building <<<
+### >>> SOCRATES (2026-11-08): flash #16 READS userdata; new crash in unported SM8250 CPU frequency; flash #17 ready <<<
 
 - Flash #16 image 7eb9e964..., kernel e2022d25..., CI42394687220 SUCCESS,
   UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. UFS fixes are patch0188,
@@ -25,10 +25,12 @@
 - User restarted into Android and unlocked it, USB connected (explicit reply).
 - Target scope (user2026-11-08): K60 Pro ONLY; other devices need not be
   supported. Avoid spending effort on donor-device compatibility.
-- Commit08b23ef; CI42396141835 RUNNING (validation already PASS).
+- Commit08b23ef; CI42396141835 SUCCESS.
 - Android read-only facts: userdata=/dev/block/sda32; /data uses f2fs via
   device mapper. This is not an iOS HFS root yet.
-- NEXT: inspect CI42396141835, pack matching flash #17, temporarily boot. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
+- Flash17 verified image8ba7285a..., kernel21b7798c...,
+  UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5 (shim/out-mac/xnu-boot.img).
+- NEXT: temporarily boot flash17 on the attached, unlocked Android device. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
   skipped', then root filesystem mount failure (Android userdata still there).
 - Sheng reference reviewed at user request: upstream689400177f93,
   CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
@@ -36,6 +38,11 @@
   XNU8796 sample APIs. Detailed findings in PORTING-SOCRATES.md.
 - Live Android confirms3+4+1 topology (CPUs0-2/3-6/7), correcting old4+3+1
   fact bank. Max frequencies2016/2803.2/3187.2MHz.
+- Expanded sheng audit DONE (details/pins in PORTING-SOCRATES.md): GPU A740
+  and SM8550 GMU/SMMU reusable candidates; AdrenoMetal uses metal2vulkan/Turnip
+  but needs our ABI. LIVE K60 GPU=Adreno740v2, touch=goodix_ts; donor touch is
+  Novatek, so reuse GENI SPI/HID layers, write Goodix protocol. Wi-Fi Ath12kWifi
+  candidate; K60 exact radio PCI ID still denied/unverified. No firmware installed.
 - M0 backups and iOS root build/install remain. NO partition writes; explicit
   destructive-step confirmation required before writing userdata.
 

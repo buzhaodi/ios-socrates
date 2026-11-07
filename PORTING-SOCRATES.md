@@ -16,8 +16,8 @@ We port *forward* inside the modern SM8250 lineage, while beryllium went *backwa
 
 | subsystem | apollo (SM8250) | beryllium (SDM845) had to | socrates (SM8550) |
 | --- | --- | --- | --- |
-| CPU freq | EPSS | rewrite (OSM/CPUFREQ-HW) | **EPSS confirmed (3 domains @ 0x17d91000/20/30)** |
-| Wi-Fi | QCA6390, ath11k | new layer (WCN3990, ath10k) | **same ath11k family** (WCN785x-class) |
+| CPU freq | EPSS | rewrite (OSM/CPUFREQ-HW) | **EPSS confirmed (3 domains @ 0x17d91000/20/30; 3+4+1 cores)** |
+| Wi-Fi | QCA6390, ath11k | new layer (WCN3990, ath10k) | **ath12k donor available; exact K60 radio ID pending** |
 | audio codec | WCD938x + CS35L41 | swap to WCD9341 + TFA9894 | WCD9385-class (same generation) |
 | UFS HC | 0x1d84000 | same | **same address 0x1d84000** |
 | GIC | GICv3 | GICv3 | GICv3 (moved to 0x17100000) |
@@ -769,8 +769,52 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   then adapt load/temperature/boost policy. Keep flash17 storage isolation
   while that foundation is prepared; do not re-enable the Apollo governor.
 
+### 2026-11-08 — sheng GPU/touch/Wi-Fi reuse audit; flash #17 CI green
+
+- User expanded donor review to GPU, touch and Wi-Fi. LIVE K60 Pro Android
+  observations: GPU sysfs reports Adreno740v2; dumpsys input identifies
+  goodix_ts and touchscreen ranges0..1439.9/0..3199.9. WLAN device attaches
+  below PCIe1c00000, endpoint0000:01:00.0. PCI vendor/device and firmware
+  directories are denied to unprivileged adb, so exact WLAN silicon remains
+  UNVERIFIED (do not promote the earlier WCN785x guess to fact).
+- GPU: UniXNU/Adreno740 commit6fa7bae2a5b3b523e790eb3e0348af4d98969e4d,
+  plus UniXNU/UniXNU-sm8550-common platform kits/ShengGmu.c and ShengGpuSmmu.c
+  are strong low-level candidates: A740 command/ring/fence/scanout work plus
+  SM8550 GMU, power/clock and SMMU handling. Board firmware, carveouts, DMA
+  and display integration need K60 validation. AdrenoMetal commit
+  6d7f73437087c57ee54a41adceb1735daaea405e uses metal2vulkan + Turnip, the
+  same broad approach as this project's Metal2 stack; its user/kernel ABI
+  and selected newer OS interfaces must be adapted to XNU8796/iOS16.
+- Touch: sheng uses Novatek NT36532E (ShengNovatekTouch commit
+  69fdd6223ed2572aa8bd8351e77c53a238276130), K60 uses Goodix. Do NOT copy its
+  controller protocol, firmware, GPIO/pins or sensor geometry. Reuse candidate
+  QcomGeniSpi commit eac47baefe6a5d2368a70351e6ad1b6361bedbe2 and HID bridge;
+  get Goodix exact model/firmware/SPI engine/IRQ/reset from K60 vendor DT and
+  driver sources before implementing the controller-specific path.
+- Wi-Fi: Ath12kWifi commit28de7b91d7a880682b777e0e3564245a99dbc3f5 ports
+  Linux ath12k + mac80211/cfg80211 and wpa_supplicant. Sheng board callbacks
+  own power, PCIe, MSI, DMA, firmware and Apple80211 integration for WCN7850.
+  This is a better candidate than assuming Apollo's ath11k can be retuned,
+  IF K60 radio ID matches. Still need K60 board/calibration/firmware, PCIe
+  resources and iOS16 network/userland ABI adaptation. No donor firmware was
+  installed and no radio/power registers changed in this research pass.
+- References: https://github.com/UniXNU/Adreno740 ;
+  https://github.com/UniXNU/AdrenoMetal ; https://github.com/UniXNU/UniXNU-sm8550-common ;
+  https://github.com/UniXNU/QcomGeniSpi ; https://github.com/UniXNU/ShengNovatekTouch ;
+  https://github.com/UniXNU/Ath12kWifi
+- Flash17: CI42396141835 SUCCESS, kernel commit08b23ef, SHA256
+  21b7798cccf2de0c8197fc85f5cedffa01731d0e05f8f9d68c2c9f26c4393fff,
+  UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5. Image shim/out-mac/xnu-boot.img
+  SHA2568ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a.
+  Packed shim/DTB/payload byte matches and new board-skip string verified;
+  read-only boot arguments preserved. Temporary hardware boot next.
+- Remaining CPU metadata issue for the next CPU/SMP milestone: mkadt.py still
+  advertises old4+3+1 nominal clock assignments. Fix to the live3+4+1 and exact
+  max frequencies before enabling SMP/governor. Flash17 keeps its identical
+  prior ADT/cpus=1 to isolate the root-probe fix.
+
 ### Next concrete actions
-1. Build0189 with GitHub Actions, pack flash17 with the current corrected shim;
+1. Flash17 CI/image complete; temporarily boot with the current corrected shim;
    temporarily boot from the user's now-clean Android state. Observe userdata,
    peripheral-skip message, then filesystem mount failure expected on Android.
 2. M0 recovery backups before any root installation; then Linux/WSL iOS root
