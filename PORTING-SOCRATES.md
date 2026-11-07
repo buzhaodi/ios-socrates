@@ -418,10 +418,29 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   SUCCESS. If LINK_STARTUP is also rejected, the panel says so and hibernate-exit /
   SSU-first variants are the next candidates.
 
+### 2026-11-07 — flash #5 verdict: BOTH UIC commands refused on wake #2; instrumented kernel built (flash #6 image 36ca84db…)
+
+- Flash #5 (7c5ee1b0): fresh boot UUID (new kernel confirmed). The wake passed the HCE
+  reset + UCRDY gate; the printout 'wake: UIC 0x10 (is 0x404 err 0x0)' decoded as: the
+  0x10 is the FALLBACK - LINK_STARTUP (0x16) was tried first and refused, then POWERON's
+  UIC ready bit never rose (err reads 0 because the starved command never latched an
+  error). On the boot's second wake the UIC command layer itself stops serving.
+- Flash #6 (instrumentation, kernel 60c1914b, CI 42320183268 green): ufs_uic_cmd prints
+  'uic 0x%x starved (st .. is .. err ..)' per starved command, and the wake prints
+  'link startup refused (is .. err ..)' between the attempts. The next photo will
+  separate 'refused' (completed with an error) from 'starved' (ready bit never returned)
+  for each of 0x16 and 0x10 - two different diseases with different fixes.
+- Flash #6 image shim/out-mac/xnu-boot.img sha 36ca84dbafd4da0dc52a21f50ee53b9a1dba5e0
+  2f1ee2294a259f0e2193cfccd.
+- Parallel hypothesis ready if the UIC layer proves dead after the kernel's HCE reset:
+  make the SHIM skip its pre-XNU wake (leave the ABL's raw handoff state for the kernel,
+  the state where the M2 POWERON+LINK_STARTUP recipe is proven green) - a shim build
+  flag away.
+
 ### Next concrete actions
-1. (user) M4 probe flash #5, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 7c5ee1b0…): same drill. Success = 'link re-established' + 'userdata on LUN 0'
-   + mountroot panic.
+1. (user) M4 probe flash #6, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 36ca84db…): same drill. The photo now needs the 'uic .. starved' / 'link startup
+   refused' lines - they name the exact disease of each UIC command.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.

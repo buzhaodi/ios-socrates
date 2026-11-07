@@ -2,16 +2,19 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 00:55): flash #4 verdict — POWERON rejected on a live device (ufshcd's rule); LINK_STARTUP-first built (kernel dc0c0abb…, CI 42253265322 green); flash #5 image 7c5ee1b0… ready <<<
+### >>> SOCRATES (2026-11-07 09:10): flash #5 verdict — BOTH UIC commands refused on wake #2; instrumented kernel built (60c1914b, CI 42320183268 green); flash #6 image 36ca84db… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Wake failure-point trajectory: #3 HCE/DP order -> #4 POWERON-rejected -> #5 LINK_STARTUP
-  first with POWERON as the cold fallback. Each flash moved exactly one layer deeper.
-- Flash #5 image shim/out-mac/xnu-boot.img sha 7c5ee1b00d06bb57… ready (verified inside).
-- NEXT: (user) flash #5. Success = 'wake: link re-established' -> fDeviceInit -> TUR ->
-  'userdata on LUN 0' -> mountroot panic = M4 probe done. Then M0 backups, then the iOS
-  root build into userdata (destructive; explicit confirmation required - AGENTS.md).
+- Failure-point trajectory: #3 HCE/DP order -> #4 POWERON-rejected -> #5 both UIC commands
+  refused (0x16 first, 0x10 fallback starved) -> #6 instrumented: the photo will say
+  'starved' vs 'refused' per command. If the UIC layer is dead after the kernel's HCE
+  reset, the next move is ready: skip the SHIM's pre-XNU wake so the kernel faces the
+  ABL's raw state (where the M2 recipe is proven green).
+- Flash #6 image shim/out-mac/xnu-boot.img sha 36ca84dbafd4da0dc52a21f50ee53b9a1dba5e0
+  2f1ee2294a259f0e2193cfccd (verified inside).
+- NEXT: (user) flash #6, photo the 'uic/starved/refused' lines. Then M0 backups, then the
+  iOS root into userdata (destructive; explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
