@@ -397,16 +397,19 @@ void shim_main(uint64_t dtb)
 	con_clear(RED);
 	con_str("SHIM", "sweet milestone 4: xnu loader");
 	con_skip();
-	/* M4: wake the UFS for the kernel BEFORE copying the payload. The
-	 * kernel's ufs_take_over_host (bsd/dev/sweet_ufs.c) reuses the live
-	 * link; on socrates the ABL leaves the device needing the full M2
-	 * recipe, which only the shim can run (the kernel has no UIC path).
-	 * The red screen keeps the wake lines for the photo; a failed wake
-	 * still boots - the kernel's own probe will say what it found. */
+	/* M4 Plan B (2026-11-07, flash #6 instrumentation): DO NOT wake the UFS
+	 * here. The kernel's own ufs_wake_host runs the M2 recipe at probe time;
+	 * a wake HERE makes the kernel's HCE reset the SECOND of the boot, and on
+	 * SM8550 the UIC layer never re-arms its ready bit after a second HCE
+	 * cycle (uic 0x16 and 0x10 both starved, st 0x0 err 0x0 - flash #6).
+	 * Leaving the ABL's raw handoff state for the kernel makes its wake the
+	 * FIRST HCE cycle - the state where the M2 recipe is proven green. */
+#ifdef NUFS_WAKE
 	stage = "ufs wake";
 	uint32_t ufs_rc = ufs_wake_for_kernel();
 	con_hex2("UFS WAKE", "final rc=", ufs_rc, "db=", 0);
 	con_skip();
+#endif
 	stage = "loader";
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);

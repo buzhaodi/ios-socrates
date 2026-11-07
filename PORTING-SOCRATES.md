@@ -437,10 +437,32 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   the state where the M2 POWERON+LINK_STARTUP recipe is proven green) - a shim build
   flag away.
 
+### 2026-11-07 — flash #6 verdict: BOTH UIC commands STARVED — the UIC layer wedges after the boot's SECOND HCE cycle; Plan B built (flash #7 d0ded551…)
+
+- Flash #6 (36ca84db, instrumented): the wake passed HCE reset + UCRDY, then the photo
+  carried the per-command verdicts (two OCR passes agree):
+    'uic 0x16 starved (st 0x0 is 0x4   err 0x0)'   <- LINK_STARTUP
+    'wake: link startup refused (is 0x4 err 0x0)'
+    'uic 0x10 starved (st 0x0 is 0x404  err 0x0)'   <- POWERON fallback
+  Not refused - STARVED: st (UIC status 0xA0) = 0 the whole poll: the ready bit dropped
+  when the command was written and never rose; err 0x0 = no error ever latched. The
+  controller saw the commands (IS flags moved) but its UIC layer never re-arms after
+  this boot's SECOND HCE=0/1 cycle (the shim ran the first). That is a controller-level
+  wedge, not a protocol error.
+- Plan B (the pre-judged fallback): the shim's pre-XNU wake is now COMPILED OUT of the
+  payload path (shim.c; NUFS_WAKE re-enables it for diagnostics). The kernel's wake
+  becomes the boot's FIRST and ONLY HCE cycle - the ABL-handoff state where the M2
+  recipe (HCE reset + POWERON + LINK_STARTUP + bDeviceInit) is proven green in 19
+  rounds. Disassembly-verified: zero ufs_wake_for_kernel calls in the shim binary.
+- Flash #7 image shim/out-mac/xnu-boot.img sha d0ded5512037e077440ca98d698e1e3b577ee0
+  ce55ab9cef996e0d5a5b659221 (Plan B shim + the instrumented kernel + rd=ufsroot0 +
+  kryo470 x8, verified inside). The kernel keeps the instrumented prints: if Plan B
+  works, the panel shows the full success chain; if not, the starved/refused lines now
+  describe the FIRST HCE cycle's behavior (a much more fundamental datum).
+
 ### Next concrete actions
-1. (user) M4 probe flash #6, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 36ca84db…): same drill. The photo now needs the 'uic .. starved' / 'link startup
-   refused' lines - they name the exact disease of each UIC command.
+1. (user) M4 probe flash #7 (Plan B), image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha d0ded551…): same drill. The kernel wake is now the boot's first HCE cycle.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
