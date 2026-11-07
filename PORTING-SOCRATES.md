@@ -518,10 +518,28 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   says 04/02 again, the fix is the kernel running SSU ACTIVE after the flag poll —
   the same dance the shim's v18 proved.
 
+### 2026-11-07 — flash #10's sense (user-read) names the disease: key 2, ASC/ASCQ 04/02; the M2 v18 SSU cure goes kernel-side (flash #11 d7c9c811…)
+
+- Flash #10 (99513bb8): the sense lines landed on the panel but the photo's UFS zone was
+  glare-blinded; the user read the fields off the screen directly:
+  'slen 0x12 key 0x2 asc/ascq 0x04/0x02' - key 2 NOT READY, ASC/ASCQ 04/02
+  'LOGICAL UNIT NOT READY, INITIALIZING COMMAND REQUIRED'. The exact M2 v6/v16 disease.
+- Cure (f2cf72c): the shim's M2 v18 SSU dance, kernel-side in 0187:
+  START STOP UNIT with POWER_CONDITION = ACTIVE (cdb {0x1b,0,0,0,0x11,0}; the plain
+  START_VALID form draws 05/24 - v17's lesson), printed as 'SSU ACTIVE rc 0', then a
+  final TUR retry. 0187 now chains: TUR -> fDeviceInit (SET + flag poll) -> TUR ->
+  SSU ACTIVE -> TUR -> find_partition. 187 patches validate + strict-chain green.
+- CI 42327688341 green, kernel d57a4daf… Flash #11 image shim/out-mac/xnu-boot.img
+  sha d7c9c811763a76c4998549121096072aade32b3dde687928ea697f944886b8aa (the SSU cdb
+  bytes verified in the kernel image).
+- Flash #11 expected: TUR fail (key 2 04/02) -> 'SSU ACTIVE rc 0' -> TUR GREEN -> GPT ->
+  'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' -> 'BSD root:
+  ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
+
 ### Next concrete actions
-1. (user) M4 probe flash #10, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 99513bb8…, kernel 5deca0a5, CI 42325979639): same drill — the photo needs the
-   NEW 'slen/key/asc/ascq' fields on the command-failure lines.
+1. (user) M4 probe flash #11, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha d7c9c811…): same drill. Success = 'SSU ACTIVE rc 0' -> 'userdata on LUN 0' ->
+   mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.

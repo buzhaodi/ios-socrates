@@ -2,20 +2,19 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 12:10): flash #9 — flag CLEAR yet TUR still CHECK-CONDITIONs; the SENSE print built (kernel 5deca0a5, CI 42325979639 green); flash #10 image 99513bb8… ready <<<
+### >>> SOCRATES (2026-11-07 13:00): flash #10's sense READ — key 2, ASC/ASCQ 04/02 ('INITIALIZING COMMAND REQUIRED', the M2 v6 disease); the v18 SSU-ACTIVE cure kernel-side (0187, kernel d57a4daf, CI 42327688341 green); flash #11 image d7c9c811… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Failure-point trajectory (all photo-decoded): #3 HCE/DP order -> #4 POWERON-rejected ->
-  #5 both UIC refused -> #6 both STARVED -> #7 ABL link ALIVE, TUR CHECK CONDITION ->
-  #8 SET 0xFF (already-done) -> #9 flag CLEAR, retry TURs still CHECK CONDITION ->
-  #10 sense bytes on every failure line (slen/key/asc/ascq, the shim's dump_response
-  offsets). M2 cross-reference loaded: 04/02 -> SSU POWER_CONDITION=ACTIVE (the v18 cure).
-- Flash #10 image shim/out-mac/xnu-boot.img sha 99513bb864564c2ea7c270b460712f4bb5e7596
-  5a7d7de8d3c3dbaacc12e62a (Plan B shim + 0187 + dev-init fallthrough + sense print +
-  rd=ufsroot0 + kryo470 x8, verified inside).
-- NEXT: (user) flash #10 — the sense names the disease; then M0 backups, then the iOS
-  root into userdata (destructive; explicit confirmation required - AGENTS.md).
+- The M4-probe chain so far (all photo-decoded): #7 ABL link ALIVE + TUR CHECK CONDITION ->
+  #8 SET fDeviceInit 0xFF (already-done) -> #9 flag CLEAR, TUR still refused -> #10 sense
+  key 2 / 04/02 (user read it off the panel) -> #11 the M2 v18 cure: SSU POWER_CONDITION=
+  ACTIVE then TUR. The 0187 chain: TUR -> fDeviceInit -> TUR -> SSU ACTIVE -> TUR -> GPT.
+- Flash #11 image shim/out-mac/xnu-boot.img sha d7c9c811763a76c4998549121096072aade32b3d
+  de687928ea697f944886b8aa (SSU cdb bytes verified inside).
+- NEXT: (user) flash #11. Success = 'SSU ACTIVE rc 0' -> 'userdata on LUN 0' ->
+  mountroot panic = M4 probe done. Then M0 backups, then the iOS root into userdata
+  (destructive; explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
