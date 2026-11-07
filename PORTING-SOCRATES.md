@@ -713,9 +713,32 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;
   https://github.com/torvalds/linux/blob/v6.12/drivers/ufs/core/ufshcd.c
 
+### 2026-11-08 — flash #16 finds userdata; crash moves to unported CPU frequency (flash #17 preparation)
+
+- User photo UUID matches the flash16 artifact. OBSERVED: Kernel data abort
+  PC0xfffffe0007530dfc/LR0xfffffe0007530de0, ESR0x96000010,
+  FAR0xfffffe31182a1100. Symbol table + disassembly resolve the PC exactly
+  to sweet_cpufreq_init+0x118, `ldr w11,[x0,#0x100]`: first EPSS LUT read
+  at physical0x18591100, the old SM8250 address. Socrates EPSS is elsewhere
+  (fact bank0x17d91000), and its remaining driver details are not ported.
+- Storage success is PROVEN by source control flow: CPU init is only called
+  AFTER ufs_find_partition(userdata), block/character device registration,
+  su.ready=true and the partition printf. The photo does not show the earlier
+  UFS lines, but this call cannot be reached on a UFS lookup error.
+  Root filesystem mount has NOT happened; Android userdata is untouched.
+- Patch0189 stops unported legacy peripheral initialization on socrates after
+  the UFS root is registered. Match the full bounded compatible list, since
+  the first tokens are D22AP/iPhone10,3 and xiaomi,sweet is shared. Apollo
+  continues its existing path. This isolates the M4 storage/root milestone;
+  individual SM8550 peripherals remain later porting work.
+- Local gates PASS:189-patch validation/replay, strict git apply0189,
+  20 executable C mock cases (9 kernel UFS,4 shim,7 board token parsing),
+  SCSI layouts and root-registration-before-board-gate ordering.
+- User confirmed Android restarted/unlocked and USB connected. CI/image next.
+
 ### Next concrete actions
-1. Flash #16 temporarily booted; user to capture red shim UIC results and
-   kernel UFS lines. Success: userdata found read-only, then filesystem mount
-   failure expected while Android userdata is still present.
+1. Build0189 with GitHub Actions, pack flash17 with the current corrected shim;
+   temporarily boot from the user's now-clean Android state. Observe userdata,
+   peripheral-skip message, then filesystem mount failure expected on Android.
 2. M0 recovery backups before any root installation; then Linux/WSL iOS root
    build. Writing userdata requires explicit destructive-step confirmation.

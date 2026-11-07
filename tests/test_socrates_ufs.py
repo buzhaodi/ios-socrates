@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def function(source, name):
-    match = re.search(r'static (?:int|uint32_t|void)\s+\n?' + name + r'\([^;]*?\)\s*\{', source)
+    match = re.search(r'static (?:int|uint32_t|void|bool)\s+\n?' + name + r'\([^;]*?\)\s*\{', source)
     if not match:
         raise AssertionError(name)
     start = match.start()
@@ -149,6 +149,42 @@ int main(void) {
 '''
 
 
+BOARD_HARNESS = r'''
+#define _POSIX_C_SOURCE 200809L
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+typedef void *DTEntry;
+#define kSuccess 0
+static const char *compat;
+static unsigned int compat_size;
+static int lookup_error, property_error;
+static int SecureDTLookupEntry(void *a, const char *b, DTEntry *out) {
+    (void)a; assert(strcmp(b, "/") == 0); *out = NULL; return lookup_error;
+}
+static int SecureDTGetProperty(DTEntry root, const char *name, const void **out, unsigned int *size) {
+    (void)root; assert(strcmp(name, "compatible") == 0);
+    *out = compat; *size = compat_size; return property_error;
+}
+FUNCTION
+int main(void) {
+    static const char socrates[] = "D22AP\0iPhone10,3\0xiaomi,sweet\0xiaomi,socrates\0qcom,sm8550";
+    static const char apollo[] = "D22AP\0iPhone10,3\0xiaomi,sweet\0qcom,sm8250";
+    compat = socrates; compat_size = sizeof(socrates); assert(ufs_is_socrates());
+    compat = apollo; compat_size = sizeof(apollo); assert(!ufs_is_socrates());
+    compat = "xiaomi,socrates-extra"; compat_size = 22; assert(!ufs_is_socrates());
+    compat = "xiaomi,socrates"; compat_size = 14; assert(!ufs_is_socrates());
+    compat_size = 0; assert(!ufs_is_socrates());
+    lookup_error = 1; assert(!ufs_is_socrates());
+    lookup_error = 0; property_error = 1; assert(!ufs_is_socrates());
+    puts("UFS: 7 board compatibility cases passed");
+}
+'''
+
+
 def main():
     with tempfile.TemporaryDirectory() as work:
         subprocess.run(['python3', str(ROOT/'tools/xnu-series-file.py'), work,
@@ -165,6 +201,13 @@ def main():
         path.write_text(c)
         subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', str(path), '-o', work+'/test'], check=True)
         subprocess.run([work+'/test'], check=True)
+        board_c = BOARD_HARNESS.replace('FUNCTION', function(source, 'ufs_is_socrates'))
+        path.write_text(board_c)
+        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', str(path), '-o', work+'/test-board'], check=True)
+        subprocess.run([work+'/test-board'], check=True)
+        root_init = function(source, 'sweet_ufs_init')
+        assert root_init.index('su.ready = true;') < root_init.index('if (ufs_is_socrates())')
+        assert root_init.index('if (ufs_is_socrates())') < root_init.index('sweet_cpufreq_init();')
         # Wire-format bounds for the SCSI commands (kernel + shim diagnostics).
         shim = (ROOT/'shim/ufs.c').read_text()
         shim_defines = '\n'.join(line for line in shim.splitlines()

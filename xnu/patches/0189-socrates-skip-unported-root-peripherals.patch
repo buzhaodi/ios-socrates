@@ -1,0 +1,62 @@
+From: socrates bring-up
+Subject: [PATCH] socrates: keep UFS root probe clear of unported SM8250 drivers
+
+Flash 16 PC 0xfffffe0007530dfc resolves to sweet_cpufreq_init+0x118:
+ldr w11,[x0,#0x100], first EPSS LUT read at SM8250 PA 0x18591100.
+The root device is already registered at this point. Match socrates in
+the complete device-tree compatible list, then return before the legacy
+peripheral calls. Apollo initialization remains unchanged.
+
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -968,6 +968,34 @@
+ 	    ufs_rd(REG_UIC_ARG2), ufs_rd(0x3c), ufs_rd(0x38), ufs_rd(0x48), ufs_rd(REG_AHIT));
+ }
+ 
++/* The shared matching string xiaomi,sweet is present on socrates too.
++ * Check every bounded compatible token, not just the first Apple identity. */
++static bool
++ufs_is_socrates(void)
++{
++	DTEntry root;
++	const char *compatible;
++	unsigned int size;
++
++	if (SecureDTLookupEntry(NULL, "/", &root) != kSuccess ||
++	    SecureDTGetProperty(root, "compatible", (void const **)&compatible, &size) != kSuccess) {
++		return false;
++	}
++	while (size != 0) {
++		size_t len = strnlen(compatible, size);
++		if (len == size) {
++			break;                         /* malformed, unterminated token */
++		}
++		if (len == sizeof("xiaomi,socrates") - 1 &&
++		    memcmp(compatible, "xiaomi,socrates", len) == 0) {
++			return true;
++		}
++		compatible += len + 1;
++		size -= (unsigned int)(len + 1);
++	}
++	return false;
++}
++
+ static int
+ sweet_ufs_init(void)
+ {
+@@ -1079,6 +1107,15 @@
+ 	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
++	/* These driver entry points use SM8250 MMIO addresses and defaults.
++	 * socrates flash #16 reached here after reading userdata, then aborted
++	 * on the first EPSS LUT read at physical 0x18591100. Keep the UFS root
++	 * available without touching unported clocks/input/USB/RPMh hardware.
++	 * Bring up the SM8550 peripherals individually in later milestones. */
++	if (ufs_is_socrates()) {
++		printf("SWEET UFS: socrates root ready; unported SM8250 peripherals skipped\n");
++		return 0;
++	}
+ 	/* CPU clock first: firmware leaves the cores slow (apollo, sweet_cpufreq.c). */
+ 	sweet_cpufreq_init();
+ 	/* Adreno 650 probe; does nothing without boot-arg sweetgpu=N (sweet_gpu.c). */

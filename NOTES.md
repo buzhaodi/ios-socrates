@@ -2,46 +2,32 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): flash #15 failed; standard UFS protocol bugs fixed, flash #16 build pending <<<
+### >>> SOCRATES (2026-11-08): flash #16 READS userdata; new crash in unported SM8250 CPU frequency; flash #17 building <<<
 
-- Observed from the user's full transcript: HCE=1/HCS=8; first UIC=0x11;
-  every wake timed out; root panic `ufsroot0 unavailable: 60`. No hardware
-  success for this revision yet. Fastboot initially empty; subsequent ADB
-  check found the attached socrates (Android boot_completed=1, uptime>599s).
-- Confirmed source bugs (Linux v6.12 UFSHCI/UPIU definitions): 0x11 is
-  DME_POWEROFF, HIBER_EXIT is 0x18; 0xa0 is not standard UIC status.
-  Acceptance = HCS bit3, completion = IS bit10, result = ARG2 low byte.
-  Earlier claims that HCE reset wedges XNU or that HCS=8 proves hibernation
-  were inferences using the wrong completion register, NOT established facts.
-- New patch 0188: standard UIC polling + asynchronous HIBER_EXIT completion,
-  AHIT disabled, no more commands after takeover failure; query reserved
-  header byte/LUN=0, BE32 value bytes20..23, flag byte23, power IDN=2;
-  SSU ACTIVE byte4=0x10; REPORT LUNS length=16 (was4096); corrected error regs.
-- Shim uses HCS.UCRDY -> HCE reset -> LINK_STARTUP -> correct fDeviceInit
-  query/poll -> NOP/TUR; no blind POWERON. AHIT=0 for the polled handoff.
-- Local gates: 188-patch replay/validation PASS; 13 executable mock-controller
-  regression cases + SCSI layouts PASS; full AArch64 shim build PASS.
-- CI 42394636091 stopped in the Linux regression harness before the kernel
-  build: strict C11 did not declare BSD bzero. Fixed the harness with a
-  portable memset wrapper (production code unchanged); rerun follows.
-- Commits: d2f8f3d (production fix), 1266980 (Linux harness portability).
-  CI 42394687220: validation and full kernel build SUCCESS.
-  Added four actual-shim UIC regression cases locally (13 total PASS);
-  macOS bzero macro compatibility also fixed in the harness.
-- UUID of local previous kernel matches user transcript exactly
-  (DD7A817D-E42A-3838-AF79-A73066B4DBA6); panic caller is IOFindBSDRoot.
-- Flash #16 image: shim/out-mac/xnu-boot.img SHA256
-  7eb9e9645b53889662319eaa3143997e59d490661d33f0046a067624823e14f4.
-  Kernel e2022d25..., UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869.
-  Verified embedded shim bytes + complete DTB table, new kernel diagnostics,
-  unchanged ADT and cmdline with ufsrw=0/rootrw=0/rd=ufsroot0.
-- Hardware attempt #16: Android boot_completed=1/uptime>599s -> adb reboot
-  bootloader -> fastboot boot shim/out-mac/xnu-boot.img. OBSERVED: Sending
-  boot.img 21388 KB OKAY (0.494s), Booting OKAY (0.102s), total0.603s.
-  This proves bootloader acceptance ONLY; the panel has not been observed.
-- NEXT: user photo/transcription of the red shim UIC/query stages and XNU UFS
-  lines. Do not call M4 passed until userdata is actually read.
-  No partition writes performed or authorized.
+- Flash #16 image 7eb9e964..., kernel e2022d25..., CI42394687220 SUCCESS,
+  UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. UFS fixes are patch0188,
+  production commit d2f8f3d; shim and query protocol corrected. Android intact.
+- OBSERVED in user photo: Kernel data abort PC0xfffffe0007530dfc,
+  LR0xfffffe0007530de0, ESR0x96000010, FAR0xfffffe31182a1100.
+  Matched kernel symbol/disassembly: sweet_cpufreq_init+0x118,
+  `ldr w11,[x0,#0x100]`, first EPSS LUT read at SM8250 PA0x18591100.
+- PROVEN by control flow: sweet_ufs_rootdev reached CPU init AFTER successful
+  GPT/userdata lookup, device registration and su.ready=true. Storage probe
+  milestone is achieved; filesystem mount is NOT observed yet. The prior
+  UFS timeout is gone; the next bug is calling an unported Apollo driver.
+- Patch0189: match xiaomi,socrates in the bounded NUL-separated root compatible
+  list, return after UFS root registration and BEFORE all unported SM8250
+  CPU/GPU/input/USB/RPMh/audio/etc initialization calls. Apollo path unchanged.
+  Do not just change CPUFREQ_DOMAIN_PA: SM8550 TSENS/domain topology and the
+  remaining driver defaults still need porting in later milestones.
+- Local gates PASS:189 patches replay; strict git apply0189;20 executable
+  mock cases (9 kernel UFS,4 shim UFS,7 compatible parsing) plus layout/order.
+- User restarted into Android and unlocked it, USB connected (explicit reply).
+- NEXT: commit/push0189, build with gh, pack matching flash #17, temporarily
+  boot. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
+  skipped', then root filesystem mount failure (Android userdata still there).
+- M0 backups and iOS root build/install remain. NO partition writes; explicit
+  destructive-step confirmation required before writing userdata.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
