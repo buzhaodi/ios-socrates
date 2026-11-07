@@ -1,81 +1,35 @@
 socrates: the ABL-handoff systematic pass — no reset; attrs, NOP, REPORT LUNS, SSU, dumps
 
-The kernel never HCE-resets a ready host anymore: flash #13's data closed
-the question - an HCE reset from the kernel wedges the UIC command layer
-(flash #6: the boot's second reset; flash #13: its FIRST), while the ABL's
-handoff state completes every query and SCSI command (flashes #7-#12).
+The kernel never HCE-resets a ready host: an HCE reset from the kernel
+wedges the UIC command layer (flash #6: the boot's second reset; flash
+#13: its FIRST), while the ABL's handoff state completes every query and
+SCSI command (flashes #7-#12). The root probe takes the link over as the
+ABL left it and walks the M2 playbook on that state, everything dumped
+for one-photo diagnosis.
 
-So the root probe now takes the link over as the ABL left it and walks the
-M2 playbook on that state, with everything dumped for one-photo
-diagnosis:
-
-- TUR retries -> the 04/02 sense (slen/key/asc/ascq) on every failure.
-- fDeviceInit: SET (255 'already done' expected) + flag poll.
-- READ_ATTR dump: bBootLUNEn (idn 0x00) and bCurrentPowerMode (idn 0x01) -
-  what the device actually reports after flash #12's writes drew 255.
-- NOP OUT: the UFS-native link ping (the shim's M2 pipeline proof).
-- REPORT LUNS: the M2 v6 lesson - 04/02 is LUN-level; enumerate first.
-- SSU POWER_CONDITION=ACTIVE: the SCSI 'initializing command' the 04/02
-  sense literally asks for.
-- Controller-state dump on final failure: hce/hcs/is/ucmd/arg2 plus the
-  UIC error-code registers (0x44 UECDL, 0x48 UECPA) - to tell
-  'never executed' from 'completed with error' from 'link failed'.
-
-The helpers (nop_out/report_luns/dump_attrs/dump_ctl) and the chain live
-after the series: the 00xx patches own that function's interior, and 0028's
-context is patched by 0030/0034 byte-for-byte.
+The helpers (forward-declared, then defined BEFORE the probe function
+that calls them - the first CI round died on C99 use-before-declare):
+READ_ATTR dump (bBootLUNEn idn 0x00, bCurrentPowerMode idn 0x01), NOP OUT
+(the UFS-native link ping), REPORT LUNS (the M2 v6 lesson: the 04/02
+sense is LUN-level - enumerate first), SSU POWER_CONDITION=ACTIVE (the
+initializing command the sense requests), and a controller-state dump on
+failure (hce/hcs/is/ucmd/arg2 + the UIC error-code registers 0x44 UECDL /
+0x48 UECPA - the Linux-ufshcd diagnosis axes).
 ---
-bsd/dev/sweet_ufs.c | 151 ++++++++++++++++++++++++++++++++++++++++++++++++++++
-1 file changed, 151 insertions(+)
+bsd/dev/sweet_ufs.c | 158 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+1 file changed, 158 insertions(+)
 
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -945,6 +945,41 @@
- 		for (int i = 0; i < 3 && (error = ufs_scsi(tur, sizeof(tur), 0, false)); i++) {
- 		}
- 	}
-+	if (error) {
-+		/* socrates flash #7 (Plan B): the ABL's handoff leaves the link UP
-+		 * but the LU refusing I/O; the M2 playbook on that state, WITHOUT
-+		 * the controller reset (a kernel-side HCE reset wedges the UIC
-+		 * layer - flashes #6 and #13). */
-+		error = ufs_dev_init();
-+		if (!error) {
-+			static const uint8_t tur2[6] = { 0x00 };
-+			for (int i = 0; i < 3 && (error = ufs_scsi(tur2, sizeof(tur2), 0, false)); i++) {
-+			}
-+		}
-+	}
-+	if (error) {
-+		/* socrates flash #14 (2026-11-07): the systematic pass. What does
-+		 * the device report, does the UFS-native link ping work, can the
-+		 * LUNs be enumerated, does the SSU (the SCSI 'initializing
-+		 * command' the 04/02 sense asks for) land - one photo, all the
-+		 * decision data. */
-+		ufs_dump_attrs();
-+		printf("SWEET UFS: nop out rc %d\n", ufs_nop_out());
-+		uint32_t luns = 0;
-+		printf("SWEET UFS: report luns rc %d luns %u\n",
-+		    ufs_report_luns(&luns), luns);
-+		static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
-+		int ssuerr = ufs_scsi(ssu, sizeof(ssu), 0, false);
-+		printf("SWEET UFS: SSU ACTIVE rc %d\n", ssuerr);
-+		if (!ssuerr) {
-+			static const uint8_t tur3[6] = { 0x00 };
-+			for (int i = 0; i < 3 && (error = ufs_scsi(tur3, sizeof(tur3), 0, false)); i++) {
-+			}
-+		}
-+		if (error) {
-+			ufs_dump_ctl("root probe failed");
-+		}
-+	}
- 	if (!error) {
- 		error = ufs_find_partition(want);
- 	}
-@@ -1017,6 +1052,93 @@
+@@ -899,6 +899,98 @@
+ 	.d_type       = D_DISK,
+ };
  
- static char sweet_log_ring[SWEET_LOG_SIZE];
- static uint64_t _Atomic sweet_log_total;
++static int ufs_nop_out(void);
++static int ufs_report_luns(uint32_t *luns_out);
++static void ufs_dump_attrs(void);
++static void ufs_dump_ctl(const char *why);
++
 +/* NOP OUT (UPIU type 0x00): the UFS-native link ping; the device answers
 + * NOP IN (0x20). The shim's M2 recipe proved the pipeline with it before
 + * any SCSI. */
@@ -163,6 +117,48 @@ bsd/dev/sweet_ufs.c | 151 ++++++++++++++++++++++++++++++++++++++++++++++++++++
 +	    ufs_rd(0x98), ufs_rd(0x44), ufs_rd(0x48));
 +}
 +
- static int sweet_log_chan;
- static uint32_t sweet_log_secs = SWEET_LOG_SECS;
- 
+ static int
+ sweet_ufs_init(void)
+ {
+@@ -943,6 +1035,41 @@
+ 		static const uint8_t tur[6] = { 0x00 };
+ 		/* The first command after the bootloader may report a unit attention. */
+ 		for (int i = 0; i < 3 && (error = ufs_scsi(tur, sizeof(tur), 0, false)); i++) {
++		}
++	}
++	if (error) {
++		/* socrates flash #7 (Plan B): the ABL's handoff leaves the link UP
++		 * but the LU refusing I/O; the M2 playbook on that state, WITHOUT
++		 * the controller reset (a kernel-side HCE reset wedges the UIC
++		 * layer - flashes #6 and #13). */
++		error = ufs_dev_init();
++		if (!error) {
++			static const uint8_t tur2[6] = { 0x00 };
++			for (int i = 0; i < 3 && (error = ufs_scsi(tur2, sizeof(tur2), 0, false)); i++) {
++			}
++		}
++	}
++	if (error) {
++		/* socrates flash #14 (2026-11-07): the systematic pass. What does
++		 * the device report, does the UFS-native link ping work, can the
++		 * LUNs be enumerated, does the SSU (the SCSI 'initializing
++		 * command' the 04/02 sense asks for) land - one photo, all the
++		 * decision data. */
++		ufs_dump_attrs();
++		printf("SWEET UFS: nop out rc %d\n", ufs_nop_out());
++		uint32_t luns = 0;
++		printf("SWEET UFS: report luns rc %d luns %u\n",
++		    ufs_report_luns(&luns), luns);
++		static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
++		int ssuerr = ufs_scsi(ssu, sizeof(ssu), 0, false);
++		printf("SWEET UFS: SSU ACTIVE rc %d\n", ssuerr);
++		if (!ssuerr) {
++			static const uint8_t tur3[6] = { 0x00 };
++			for (int i = 0; i < 3 && (error = ufs_scsi(tur3, sizeof(tur3), 0, false)); i++) {
++			}
++		}
++		if (error) {
++			ufs_dump_ctl("root probe failed");
+ 		}
+ 	}
+ 	if (!error) {
