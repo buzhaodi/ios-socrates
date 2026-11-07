@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,840 @@
+@@ -0,0 +1,843 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -583,27 +583,30 @@ new file mode 100644
 +static int
 +ufs_take_over_host(void)
 +{
-+	/* Flash #12 (2026-11-07, full panel transcript): the ready gate was a
-+	 * miscalibration. The ABL's handoff has the LINK up (hce 1, DP, UTRLRDY)
-+	 * but the DEVICE powered down (bPowerMode 0, INACTIVE - the M2 v16 read);
-+	 * TUR draws 04/02 'INITIALIZING COMMAND REQUIRED' and every attribute
-+	 * write draws GENERIC_FAILURE on that state. The M2 green recipe runs the
-+	 * wake UNCONDITIONALLY - HCE reset + DME_POWERON + DME_LINK_STARTUP -
-+	 * and with Plan B (the shim no longer wakes) this is the boot's FIRST
-+	 * HCE cycle: the state where the recipe is proven green in 19 rounds.
-+	 * The UIC starve of flashes #5/#6 was a SECOND-cycle disease; it cannot
-+	 * happen here. */
-+	printf("SWEET UFS: wake (hce 0x%x hcs 0x%x)\n", ufs_rd(REG_HCE), ufs_rd(REG_HCS));
-+	int werr = ufs_wake_host();
-+	if (werr) {
-+		return werr;
++	/* Flash #13 closed the reset question with data: an HCE reset FROM
++	 * THE KERNEL wedges the UIC command layer - both the boot's second
++	 * reset (flash #6) and its FIRST (flash #13: the first POWERON after
++	 * the reset completed with PA err 0x80000001, then every later UIC
++	 * command starved, ready bit dead). The ABL's handoff state, by
++	 * contrast, completes every query and SCSI command (flashes #7-#12:
++	 * attribute writes answered, TUR returned real sense). So: do NOT
++	 * reset a ready host - take the link over as it is. The wake stays
++	 * as the fallback for a genuinely dead ABL handoff (hce clear or
++	 * DP/UTRLRDY missing), with the IS-acknowledged UIC sequence. */
++	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
++	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x), waking\n", hce, hcs);
++		int error = ufs_wake_host();
++		if (error) {
++			return error;
++		}
++		hcs = ufs_rd(REG_HCS);
++		if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++			printf("SWEET UFS: wake left host not ready (hcs 0x%x)\n", hcs);
++			return ENXIO;
++		}
++		su.woke = true;
 +	}
-+	uint32_t hcs = ufs_rd(REG_HCS);
-+	if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
-+		printf("SWEET UFS: wake left host not ready (hcs 0x%x)\n", hcs);
-+		return ENXIO;
-+	}
-+	su.woke = true;
 +	if (ufs_rd(REG_UTRLDBR)) {
 +		printf("SWEET UFS: requests outstanding from the bootloader\n");
 +		return EBUSY;
