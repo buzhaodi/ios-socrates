@@ -6,7 +6,8 @@
 
 - Observed from the user's full transcript: HCE=1/HCS=8; first UIC=0x11;
   every wake timed out; root panic `ufsroot0 unavailable: 60`. No hardware
-  success for this revision yet. `fastboot devices` is empty on this Mac.
+  success for this revision yet. Fastboot initially empty; subsequent ADB
+  check found the attached socrates (Android boot_completed=1, uptime>599s).
 - Confirmed source bugs (Linux v6.12 UFSHCI/UPIU definitions): 0x11 is
   DME_POWEROFF, HIBER_EXIT is 0x18; 0xa0 is not standard UIC status.
   Acceptance = HCS bit3, completion = IS bit10, result = ARG2 low byte.
@@ -24,12 +25,17 @@
   build: strict C11 did not declare BSD bzero. Fixed the harness with a
   portable memset wrapper (production code unchanged); rerun follows.
 - Commits: d2f8f3d (production fix), 1266980 (Linux harness portability).
-  CI 42394687220: validation PASS, full kernel build RUNNING.
+  CI 42394687220: validation and full kernel build SUCCESS.
   Added four actual-shim UIC regression cases locally (13 total PASS);
   macOS bzero macro compatibility also fixed in the harness.
 - UUID of local previous kernel matches user transcript exactly
   (DD7A817D-E42A-3838-AF79-A73066B4DBA6); panic caller is IOFindBSDRoot.
-- NEXT: inspect CI 42394687220, pack a fresh kernel + shim into flash #16.
+- Flash #16 image: shim/out-mac/xnu-boot.img SHA256
+  7eb9e9645b53889662319eaa3143997e59d490661d33f0046a067624823e14f4.
+  Kernel e2022d25..., UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869.
+  Verified embedded shim bytes + complete DTB table, new kernel diagnostics,
+  unchanged ADT and cmdline with ufsrw=0/rootrw=0/rd=ufsroot0.
+- NEXT: temporary boot on the attached socrates, observe panel via user photo.
   No partition writes performed or authorized.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<

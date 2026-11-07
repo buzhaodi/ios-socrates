@@ -668,7 +668,10 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 ### 2026-11-08 — flash #15 transcript: protocol errors found; flash #16 in preparation
 
 - OBSERVED: user's full log shows HCE=1/HCS=8; UIC 0x11 first, then 0x16/0x10,
-  all reported timeout, root panic errno60. No phone connected to this Mac.
+  all reported timeout, root panic errno60. Initial fastboot enumeration
+  was empty; subsequent ADB check found socrates in fully-booted Android
+  (boot_completed=1, uptime>599s). Device IS available for a temporary boot.
+  UFS sysfs attribute reads are denied to the unprivileged adb shell.
 - CONFIRMED by Linux v6.12 include/ufs/ufshci.h: 0x11 is DME_POWEROFF,
   HIBER_EXIT=0x18; 0xa0 is the end of the standard register block, not status.
   Poll HCS.UCRDY before dispatch, IS.UCCS after, ARG2[7:0] result; HIBER_EXIT
@@ -692,17 +695,21 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - CI 42394636091 stopped in the Linux regression harness before the kernel
   build: strict C11 did not declare BSD bzero. Fixed the harness with a
   portable memset wrapper (production code unchanged); rerun follows.
-- Fix commits d2f8f3d/1266980; CI 42394687220 validation PASS, full kernel
-  building. Added actual-shim UIC mock execution (4 cases), total13 PASS.
+- Fix commits d2f8f3d/1266980; CI 42394687220 validation and full kernel
+  build SUCCESS. Added actual-shim UIC mock execution (4 cases), total13 PASS.
   Local previous-kernel UUID exactly matches the user transcript; symbol table
   resolves the panic caller to IOFindBSDRoot.
-- Hardware outcome is UNKNOWN. CI and packed image to follow; no storage writes.
+- Flash #16 built and inspected: shim/out-mac/xnu-boot.img SHA256
+  7eb9e9645b53889662319eaa3143997e59d490661d33f0046a067624823e14f4;
+  kernel e2022d25f29dd8b77798eb82b184ae4107ea0289dea2259081c06befc987e46a,
+  UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. Packed shim/DTB/payload exact
+  byte matches verified; read-only cmdline preserved. Hardware boot next.
 - References: https://github.com/torvalds/linux/blob/v6.12/include/ufs/ufshci.h ;
   https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;
   https://github.com/torvalds/linux/blob/v6.12/drivers/ufs/core/ufshcd.c
 
 ### Next concrete actions
-1. Build patch0188 via GitHub Actions and pack flash #16 with the matching shim.
+1. CI and image complete; temporary boot flash #16 on the attached socrates.
 2. Temporary `fastboot boot` on hardware; capture the red shim UIC results and
    kernel UFS lines. Success: userdata found read-only, then filesystem mount
    failure expected while Android userdata is still present.
