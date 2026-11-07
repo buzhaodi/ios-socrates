@@ -1,6 +1,6 @@
 # ios-socrates
 
-A native **iOS 16.7.16 (20H392) port for the Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550). The goal is to boot the iPhone X system on a patched XNU kernel, without Android underneath. **Current hardware progress: XNU boots, reads the internal UFS/GPT and registers `userdata` as its root device. The iOS root is installed in userdata: hardware photos confirm HFS mounting and PID 1 launchd executing early boot tasks. SpringBoard and a working iOS interface are not yet verified.**
+A native **iOS 16.7.16 (20H392) port for the Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550). The goal is to boot the iPhone X system on a patched XNU kernel, without Android underneath. **Current hardware progress: XNU boots, reads the internal UFS/GPT and registers `userdata` as its root device. The iOS root is installed in userdata: hardware photos confirm HFS mounting and PID 1 launchd completing early boot; framebuffer statistics still report zero iOS frames. SpringBoard and a working iOS interface are not yet verified.**
 
 This repository targets **K60 Pro only**. It inherits the [ios-apollo](https://github.com/aTechGeekDev/ios-apollo) foundation and uses [ios-beryllium](https://github.com/LakoMoor/ios-beryllium) and [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) as porting references. A donor implementation is not evidence that its driver works on this phone.
 
@@ -38,7 +38,9 @@ HFS then rejects the existing partition content (`unknown Volume Signature: 152e
 | 8 | Wi-Fi / Bluetooth | Port pending | sheng ath12k is a candidate; exact K60 Wi-Fi chip/PCI ID and board firmware still need verification |
 | 9 | Audio / haptics | Port pending | K60 board-specific codec, amplifier and motor integration remain |
 
-Latest verified build: [GitHub Actions 42396141835](https://github.com/buzhaodi/ios-socrates/actions/runs/42396141835), kernel source commit `08b23ef`, patches **0001–0189**. Local validation passes, including 20 executable UFS/board-selection regression cases.
+Latest verified build: [GitHub Actions 42401816409](https://github.com/buzhaodi/ios-socrates/actions/runs/42401816409), kernel source commit `63870c4`, patches **0001–0190**. Local validation passes, including 20 executable UFS/board-selection regression cases.
+
+Diagnostic patch 0190 is built separately to inspect launchd/backboardd/SpringBoard without enabling inherited SM8250 peripherals. Hardware results and the exact CI run are recorded in `NOTES.md` and `PORTING-SOCRATES.md`.
 
 - Verified read-only storage probe #17: `shim/out-mac/xnu-boot.img`
 - Image SHA-256: `8ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a`
@@ -58,7 +60,7 @@ Full device facts, source pins and flash-by-flash results: [`PORTING-SOCRATES.md
 Xiaomi bootloader (unlocked)
   └─ fastboot boot xnu-ios-root-boot.img   temporary kernel boot
      └─ shim                        loads XNU + the Apple device tree, wakes the UFS
-        └─ XNU kernel (SWEET patches)  189-patch series on xnu-8796.141.3
+        └─ XNU kernel (SWEET patches)  190-patch series on xnu-8796.141.3
            └─ ufsroot0B / userdata      storage probe verified; HFS+ root now installed
               └─ iOS root (HFS+)        installed after user confirmation
                  └─ launchd → backboardd → SpringBoard   launchd confirmed; UI pending
@@ -124,7 +126,7 @@ The M4 storage-only probe is now verified (flash #17): the kernel reports `SWEET
 
 ## Repository layout
 
-- `xnu/patches/` — the 189-patch series on xnu-8796.141.3 (the SWEET machine config + drivers; socrates work: 0010/0012 early console, 0028 UFS root + wake, 0187 root diagnostics, 0188 standard UFS protocol fixes, 0189 the socrates peripheral gate)
+- `xnu/patches/` — the 190-patch series on xnu-8796.141.3 (the SWEET machine config + drivers; socrates work: 0010/0012 early console, 0028 UFS root + wake, 0187 root diagnostics, 0188 standard UFS protocol fixes, 0189 the socrates peripheral gate, 0190 independent process diagnostics)
 - `shim/` — the boot shim (aarch64 freestanding, builds with Homebrew clang+lld)
 - `tools/` — `mkadt.py` (Apple device tree builder), `mkpayload.py`, `mkbootimg_v0.py`, `qemu-sweet.py` (the QEMU harness), `build-ios-root.sh` (iPhone X root builder, needs Linux)
 - `wifi/` — the inherited LinuxKPI compat layer for ath11k (not yet a verified K60 Wi-Fi driver); `userland/` — Mesa, the CoreAnimation bridge, audio, Bluetooth

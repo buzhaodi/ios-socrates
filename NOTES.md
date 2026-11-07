@@ -80,11 +80,23 @@
   matched-process count. Timing bootargs sweetsample_delay/interval accept
   1..3600 seconds, default90/120 unchanged. No trust/entropy/GPU bypasses.
 - Local gates PASS:190-patch validation/replay, existing20 executable UFS/shim/
-  board cases + layouts/order; actual CI17-header AArch64 syntax compiles for
-  sweet_ufs.c and sweet_sample.c (2/2). Full CI and boot19 still pending.
-- User authorized next temporary test; fastboot connected. Plan: same ADT/
-  shim/root as18, new diagnostic kernel with launchd,backboardd,SpringBoard,
-  configd,xpcproxy samples every30s (40 rounds). No root reflash.
+  board cases + layouts/order; actual CI17-header AArch64 syntax compiles2/2.
+  Compiled sources exactly match series replay. Commit63870c4, full kernel
+  CI42401816409 SUCCESS (validation/build/patch-presence checks all pass).
+- Boot19 TEMPORARILY BOOTED after user authorization and live product=socrates
+  check. Same root18 ADT/shim, new kernel; samples launchd,backboardd,
+  SpringBoard,configd,xpcproxy after30s then every30s (40 rounds).
+  Sending21388KB OKAY0.494s, Booting OKAY0.102s,total0.602s,exit0.
+  No userdata flash/erase or protected-partition writes. Bootloader acceptance
+  only; panel/service/rendering result UNKNOWN pending user image.
+- Boot19: shim/out-mac/xnu-ios-diag19-boot.img SHA256
+  8f78035103b8784318803bd8a56a70cd5df0aa4eefec82526a4fddd857beccd3.
+  Kernel59ef61cb5d3c7b875de0633957674fd12658199337919b805c2bb5872f87981a,
+  UUID9CE757C0-F46F-393D-8B5A-24204ADDED7D. ADT SHA256aab86c5d... unchanged;
+  packed shim/vendor DTB/payload/10 kernel segments/ADT/args byte-verified.
+  Local logs: research/ios-root/boot19-fastboot.log,boot19-manifest.json;
+  xnu/out-flash19/ci.log. Boot18 retained. NEXT: user photo of SMP lines,
+  watched service names/PIDs/thread PCs to diagnose actual userland state.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;

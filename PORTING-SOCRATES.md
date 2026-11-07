@@ -1011,9 +1011,25 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Full kernel CI and hardware outcome pending. Reference projects remain
   research sources, not drop-in K60 GPU/input drivers.
 
+### 2026-11-08 — boot19 CI SUCCESS; temporary boot ACCEPTED
+
+- Source63870c4, CI42401816409 SUCCESS including190-patch presence and full
+  kernel link. Kernel SHA25659ef61cb5d3c7b875de0633957674fd12658199337919b805c2bb5872f87981a,
+  UUID9CE757C0-F46F-393D-8B5A-24204ADDED7D.
+- New temporary image shim/out-mac/xnu-ios-diag19-boot.img SHA256
+  8f78035103b8784318803bd8a56a70cd5df0aa4eefec82526a4fddd857beccd3.
+  Same ADT/shim as18. Packed payload,10 kernel segments,device config and
+  sample names/timing verified. Samples launchd,backboardd,SpringBoard,
+  configd,xpcproxy after30s/every30s,40 rounds; existing boot flags retained.
+- User authorized test; live fastboot product=socrates verified. Temporary
+  fastboot boot accepted:21388KB Sending OKAY0.494s, Booting OKAY0.102s,
+  total0.602s,exit0. NO root reflash/erase or protected-partition writes.
+- Panel result UNKNOWN; Mac cannot read the phone framebuffer or iOS logs.
+  Await user photo of SMP service/PID/thread lines; acceptance is not UI proof.
+  Local-only boot19-manifest.json / boot19-fastboot.log and full CI log retained.
+
 ### Next concrete actions
-1. Commit/push0190 and build kernel through gh xnu.yml; record run and result.
-2. Pack boot19 with existing root18 ADT/shim; watch launchd,backboardd,
-   SpringBoard,configd,xpcproxy every30s; temporary fastboot boot only.
-3. Obtain user panel evidence to distinguish absent services and waiting threads.
-   Keep backups local and preserve installed root and protected partitions.
+1. Obtain boot19 panel image with SMP launchd/backboardd/SpringBoard lines.
+2. Diagnose absent services versus waiting/running threads before new fixes.
+3. Continue K60 drivers from banked sheng references once the next blocker is
+   established. Preserve root and protected partitions; backups stay local.
