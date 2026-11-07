@@ -1,35 +1,39 @@
-socrates: the ABL-handoff dance - fDeviceInit, then SSU POWER_CONDITION=ACTIVE
+socrates: the ABL-handoff dance — fDeviceInit, bBootLUNEn, SSU POWER_CONDITION=ACTIVE
 
-Flash #7 (Plan B): the ABL's handoff leaves the link UP (the ready gate
-passes, no wake needed) but the device in needs-init state; TUR
-CHECK-CONDITIONs (response 0x1, status 0x2) on every retry - the M2
-first-flash behavior. The shim's v19 cure: SET fDeviceInit, poll until
-the device clears it, retry TUR.
+The ABL's handoff (Plan B: the shim does not wake the device) leaves the
+link UP but the device refusing SCSI. The chain, each step proven by a
+flash photo + the M2 rounds:
 
-Flash #8/#9: the flag reads CLEAR (the ABL already ran bring-up) yet TUR
-still refuses. Flash #10's sense named the disease: key 2 / ASC-ASCQ
-04-02 - 'LOGICAL UNIT NOT READY, INITIALIZING COMMAND REQUIRED'. The
-initializing command, panel-proven in the shim's M2 v18: START STOP UNIT
-with POWER_CONDITION = ACTIVE (byte 4 = 0x11; the plain START_VALID form
-draws 05/24 INVALID FIELD IN CDB). Then TUR once more.
+- TUR retries -> CHECK CONDITION (flash #7).
+- fDeviceInit: SET + flag poll (flash #8/#9 - the flag reads clear, the
+  ABL already ran bring-up; the SET itself draws 0xFF, read the flag
+  anyway: the shim v19 logic).
+- Still key 2 / ASC-ASCQ 04-02 'INITIALIZING COMMAND REQUIRED'
+  (flash #10, user-read sense).
+- bBootLUNEn: the ABL disables the boot LU (v16: bBootLUNEn=0); the
+  shim's green recipe re-enables it (WRITE_ATTR idn 0x00 = 1) BEFORE any
+  SSU - flash #11's SSU drew INVALID FIELD without this gate.
+- SSU POWER_CONDITION = ACTIVE (byte 4 = 0x11; the plain START_VALID
+  form draws 05/24 - the shim's v17/v18).
+- Final TUR retries, then the GPT lookup.
 
 The chain lives in its own blocks between the first TUR loop and the
 partition lookup; the 00xx patches own that function's interior, so this
-rides after the series instead of editing 0028 (whose context 0030/0034
-patch byte-for-byte).
+rides after the series (0028's context is patched by 0030/0034
+byte-for-byte).
 ---
-bsd/dev/sweet_ufs.c | 39 +++++++++++++++++++++++++++++++++++++++
-1 file changed, 39 insertions(+)
+bsd/dev/sweet_ufs.c | 46 ++++++++++++++++++++++++++++++++++++++++++++++
+1 file changed, 46 insertions(+)
 
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -863,6 +863,31 @@
+@@ -929,6 +929,37 @@
  		for (int i = 0; i < 3 && (error = ufs_scsi(tur, sizeof(tur), 0, false)); i++) {
  		}
  	}
 +	if (error) {
-+		/* socrates flash #7 (Plan B): the ABL's handoff leaves the link UP but the
-+		 * device in needs-init state - TUR CHECK-CONDITIONs on every retry. */
++		/* socrates flash #7 (Plan B): the ABL's handoff leaves the link UP but
++		 * the device in needs-init state - TUR CHECK-CONDITIONs on every retry. */
 +		error = ufs_dev_init();
 +		if (!error) {
 +			static const uint8_t tur2[6] = { 0x00 };
@@ -38,17 +42,23 @@ bsd/dev/sweet_ufs.c | 39 +++++++++++++++++++++++++++++++++++++++
 +		}
 +	}
 +	if (error) {
-+		/* socrates flash #10 (2026-11-07): the sense on the CHECK CONDITION is
-+		 * key 2 / ASC-ASCQ 04-02 - 'LOGICAL UNIT NOT READY, INITIALIZING COMMAND
-+		 * REQUIRED'. The initializing command, panel-proven in the shim's M2 v18:
-+		 * START STOP UNIT with POWER_CONDITION = ACTIVE (byte 4 = 0x11; the plain
-+		 * START_VALID form draws 05/24 INVALID FIELD IN CDB). Then TUR once more. */
-+		static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
-+		error = ufs_scsi(ssu, sizeof(ssu), 0, false);
-+		printf("SWEET UFS: SSU ACTIVE rc %d\n", error);
-+		if (!error) {
-+			static const uint8_t tur3[6] = { 0x00 };
-+			for (int i = 0; i < 3 && (error = ufs_scsi(tur3, sizeof(tur3), 0, false)); i++) {
++		/* socrates flash #11 (2026-11-07): TUR still refuses with sense key 2 /
++		 * ASC-ASCQ 04-02 'INITIALIZING COMMAND REQUIRED' after the flag poll.
++		 * The M2 green recipe has TWO more steps before SSU: the ABL disables
++		 * the boot LU (bBootLUNEn=0, the v16 panel), and the shim re-enables it
++		 * (WRITE_ATTR idn 0x00 = 1) - the SSU drew INVALID FIELD until then. */
++		int aerr = ufs_query_val(0x04, 0x00, 0x81, 1u << 16);  /* WRITE_ATTR bBootLUNEn=1 */
++		printf("SWEET UFS: bBootLUNEn rc %d\n", aerr);
++		if (!aerr) {
++			/* START STOP UNIT with POWER_CONDITION = ACTIVE (byte 4 = 0x11;
++			 * the plain START_VALID form draws 05/24 - the shim's v17/v18). */
++			static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
++			error = ufs_scsi(ssu, sizeof(ssu), 0, false);
++			printf("SWEET UFS: SSU ACTIVE rc %d\n", error);
++			if (!error) {
++				static const uint8_t tur3[6] = { 0x00 };
++				for (int i = 0; i < 3 && (error = ufs_scsi(tur3, sizeof(tur3), 0, false)); i++) {
++				}
 +			}
 +		}
 +	}
