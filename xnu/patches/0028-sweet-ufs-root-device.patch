@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,835 @@
+@@ -0,0 +1,840 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -322,6 +322,12 @@ new file mode 100644
 +	ufs_wr(REG_UIC_ARG3, 0);
 +	/* arg2 (0x98) is not defined for these commands; clear what ABL left */
 +	ufs_wr(0x98, 0);
++	/* Acknowledge any stale completion/error flags first: flash #13 showed
++	 * the failed POWERON's IS bits (0x404) staying set and the NEXT UIC
++	 * command starving with the ready bit dead - the controller will not
++	 * take a new command while its completion state is unacknowledged
++	 * (UFSHCI: IS is write-1-to-clear). */
++	ufs_wr(REG_IS, ufs_rd(REG_IS));
 +	ufs_wr(REG_UIC_CMD, cmd);
 +	/* The UIC ready bit drops while the command runs, then rises when done. */
 +	for (int i = 0; i < 100 && (ufs_rd(REG_UIC_STATUS) & 1); i++) {
@@ -330,6 +336,8 @@ new file mode 100644
 +	for (int i = 0; i < 1000 && (ufs_rd(REG_UIC_STATUS) & 1) == 0; i++) {
 +		delay(1);
 +	}
++	/* Acknowledge this command's completion flags too, win or lose. */
++	ufs_wr(REG_IS, ufs_rd(REG_IS));
 +	if ((ufs_rd(REG_UIC_STATUS) & 1) == 0) {
 +		/* Flash #5: on the boot's second wake the UIC layer can refuse
 +		 * outright (is 0x404, err 0) - the ready bit never returns. Say
@@ -377,22 +385,19 @@ new file mode 100644
 +		    ufs_rd(REG_HCE), ufs_rd(REG_HCS));
 +		return ENXIO;
 +	}
-+	/* DME_POWERON then DME_LINK_STARTUP - the M2 recipe's cold order,
-+	 * proven on the ABL handoff state in 19 shim rounds (v18/v19 panel:
-+	 * PWON -> LINK -> DEVINI -> TUR rc=0). Plan B guarantees this is a
-+	 * cold device; POWERON-first matches the proven bytes. If POWERON is
-+	 * rejected anyway (a live device, flash #4: err 0x80000001), fall
-+	 * through to LINK_STARTUP; and if that fails, retry the pair once. */
-+	int pwerr = ufs_uic_cmd(0x10);           /* DME_POWERON */
-+	printf("SWEET UFS: wake: poweron rc %d\n", pwerr);
++	/* Flash #13 proved the ABL handoff device is ALREADY POWERED: the first
++	 * DME_POWERON completed with PA err 0x80000001 ('already powered'),
++	 * and its unacknowledged IS completion flags starved every following
++	 * UIC command (the ready bit died) - both fixed here: IS ack'd around
++	 * every command, and LINK_STARTUP first (the warm path). POWERON is
++	 * only the fallback when startup says the device is down. */
 +	int error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
++	printf("SWEET UFS: wake: link startup rc %d\n", error);
 +	if (error) {
 +		printf("SWEET UFS: wake: link startup refused (is 0x%x err 0x%x)\n",
 +		    ufs_rd(REG_IS), ufs_rd(0x48));
-+		if (pwerr == 0) {
-+			error = ufs_uic_cmd(0x16); /* powered: just retry the startup */
-+		} else if (ufs_uic_cmd(0x10) == 0) { /* pair retry, the cold path */
-+			error = ufs_uic_cmd(0x16);
++		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON, the cold fallback */
++			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
 +		}
 +	}
 +	if (error) {
