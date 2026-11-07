@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,755 @@
+@@ -0,0 +1,761 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -233,8 +233,14 @@ new file mode 100644
 +
 +	uint32_t ocs = utrd->dw2 & 0xff;
 +	if (ocs || ucd->resp[0] != 0x21 || ucd->resp[6] || ucd->resp[7]) {
-+		printf("SWEET UFS: command 0x%02x failed: ocs 0x%x upiu 0x%x response 0x%x status 0x%x\n",
-+		    cdb[0], ocs, ucd->resp[0], ucd->resp[6], ucd->resp[7]);
++		/* Sense per struct utp_cmd_rsp: sense_len at resp[32..33], the key at
++		 * resp[36], ASC/ASCQ at resp[46..47] (the shim's dump_response offsets,
++		 * proven across the M2 rounds). Flash #9: TUR CHECK-CONDITIONs with the
++		 * flag CLEAR and the response code 0x1 - only the sense names why. */
++		printf("SWEET UFS: command 0x%02x failed: ocs 0x%x upiu 0x%x response 0x%x status 0x%x "
++		    "slen 0x%x key 0x%x asc/ascq 0x%02x/0x%02x\n",
++		    cdb[0], ocs, ucd->resp[0], ucd->resp[6], ucd->resp[7],
++		    ucd->resp[32] | ucd->resp[33] << 8, ucd->resp[36], ucd->resp[46], ucd->resp[47]);
 +		return EIO;
 +	}
 +	return 0;
