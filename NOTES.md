@@ -75,11 +75,16 @@
   timezone link paths are absent; kern.prng.user_reseed_count ENOENT refers to
   a missing sysctl interface, distinct from a missing seed file. Do not create
   fake entropy or bypass checks just to suppress output.
-- NEXT: focused process diagnostics for launchd/backboardd/SpringBoard to
-  distinguish absent services, waiting threads and display integration gaps.
-  The socrates gate skips the optional sampler with the unsafe old hardware;
-  inspect enabling the pure sampler independently. No diagnostic patch/build
-  or new phone boot has occurred yet. No repeat root-image write needed.
+- Diagnostic patch0190 now prepared: start pure sweet_sample on socrates
+  before returning past the unsafe SM8250 hardware; print watched names and
+  matched-process count. Timing bootargs sweetsample_delay/interval accept
+  1..3600 seconds, default90/120 unchanged. No trust/entropy/GPU bypasses.
+- Local gates PASS:190-patch validation/replay, existing20 executable UFS/shim/
+  board cases + layouts/order; actual CI17-header AArch64 syntax compiles for
+  sweet_ufs.c and sweet_sample.c (2/2). Full CI and boot19 still pending.
+- User authorized next temporary test; fastboot connected. Plan: same ADT/
+  shim/root as18, new diagnostic kernel with launchd,backboardd,SpringBoard,
+  configd,xpcproxy samples every30s (40 rounds). No root reflash.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;

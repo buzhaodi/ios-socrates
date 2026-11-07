@@ -999,9 +999,21 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   Previous warnings did not prevent early boot completion but their later
   impact is unknown. No new kernel changes, CI, boot or partition writes.
 
+### 2026-11-08 — boot19 process diagnostics prepared (not booted)
+
+- User authorized testing and phone is visible in FASTBOOT. Patch0190 enables
+  existing pure process sampler before socrates skips old SM8250 peripherals.
+  It prints the watched list and matched count, with bounded1..3600-second
+  delay/interval overrides; default timing90/120 remains unchanged.
+- PASS:190-patch validation/replay;20 existing executable regression cases,
+  layouts/root-order guards;2/2 exact CI17-header AArch64 syntax compiles.
+  No new hardware driver enabled; no root writes or phone boot yet.
+- Full kernel CI and hardware outcome pending. Reference projects remain
+  research sources, not drop-in K60 GPU/input drivers.
+
 ### Next concrete actions
-1. Add focused process-state diagnostics for launchd/backboardd/SpringBoard;
-   inspect enabling the existing pure sampler before the socrates hardware gate.
-2. Build/test a temporary diagnostic boot only if needed; no root reflash.
-3. Continue K60 CPU/touch/GPU/Wi-Fi adaptation from the banked references.
+1. Commit/push0190 and build kernel through gh xnu.yml; record run and result.
+2. Pack boot19 with existing root18 ADT/shim; watch launchd,backboardd,
+   SpringBoard,configd,xpcproxy every30s; temporary fastboot boot only.
+3. Obtain user panel evidence to distinguish absent services and waiting threads.
    Keep backups local and preserve installed root and protected partitions.
