@@ -35,7 +35,12 @@
   Kernel e2022d25..., UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869.
   Verified embedded shim bytes + complete DTB table, new kernel diagnostics,
   unchanged ADT and cmdline with ufsrw=0/rootrw=0/rd=ufsroot0.
-- NEXT: temporary boot on the attached socrates, observe panel via user photo.
+- Hardware attempt #16: Android boot_completed=1/uptime>599s -> adb reboot
+  bootloader -> fastboot boot shim/out-mac/xnu-boot.img. OBSERVED: Sending
+  boot.img 21388 KB OKAY (0.494s), Booting OKAY (0.102s), total0.603s.
+  This proves bootloader acceptance ONLY; the panel has not been observed.
+- NEXT: user photo/transcription of the red shim UIC/query stages and XNU UFS
+  lines. Do not call M4 passed until userdata is actually read.
   No partition writes performed or authorized.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<

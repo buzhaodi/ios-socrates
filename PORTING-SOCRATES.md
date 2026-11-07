@@ -703,15 +703,19 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   7eb9e9645b53889662319eaa3143997e59d490661d33f0046a067624823e14f4;
   kernel e2022d25f29dd8b77798eb82b184ae4107ea0289dea2259081c06befc987e46a,
   UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. Packed shim/DTB/payload exact
-  byte matches verified; read-only cmdline preserved. Hardware boot next.
+  byte matches verified; read-only cmdline preserved.
+- Hardware attempt #16 OBSERVED: adb reboot bootloader from fully-booted
+  Android; fastboot boot accepted 21388 KB (Sending OKAY0.494s, Booting
+  OKAY0.102s, total0.603s). NO flash/erase commands or partition writes.
+  No panel access from this Mac: UFS initialization/root-read outcome UNKNOWN,
+  awaiting user photo/transcription. Bootloader acceptance is not M4 success.
 - References: https://github.com/torvalds/linux/blob/v6.12/include/ufs/ufshci.h ;
   https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;
   https://github.com/torvalds/linux/blob/v6.12/drivers/ufs/core/ufshcd.c
 
 ### Next concrete actions
-1. CI and image complete; temporary boot flash #16 on the attached socrates.
-2. Temporary `fastboot boot` on hardware; capture the red shim UIC results and
+1. Flash #16 temporarily booted; user to capture red shim UIC results and
    kernel UFS lines. Success: userdata found read-only, then filesystem mount
    failure expected while Android userdata is still present.
-3. M0 recovery backups before any root installation; then Linux/WSL iOS root
+2. M0 recovery backups before any root installation; then Linux/WSL iOS root
    build. Writing userdata requires explicit destructive-step confirmation.
