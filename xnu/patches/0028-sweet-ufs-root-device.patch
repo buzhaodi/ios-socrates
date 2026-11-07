@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,750 @@
+@@ -0,0 +1,755 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -480,8 +480,13 @@ new file mode 100644
 +	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
 +	int error = ufs_query(0x06, 0x01, 0x81);         /* SET_FLAG fDeviceInit */
 +	if (error) {
-+		printf("SWEET UFS: set fDeviceInit error %d\n", error);
-+		return error;
++		/* Flash #8 (2026-11-07): with no HCE reset this boot (Plan B), the
++		 * ABL already ran the device's bring-up during its own boot, and a
++		 * SET of the already-done operation returns GENERIC_FAILURE (0xFF,
++		 * 'set fDeviceInit error 255'). The shim's v19 poll handles exactly
++		 * this: after any SET outcome, READ the flag - if it reads 0 the
++		 * bring-up is done and TUR proceeds. */
++		printf("SWEET UFS: set fDeviceInit error %d, reading the flag\n", error);
 +	}
 +	for (int i = 0; i < 100; i++) {                  /* up to 5 s */
 +		error = ufs_query(0x05, 0x01, 0x01);     /* READ_FLAG fDeviceInit */
