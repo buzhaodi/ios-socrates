@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,827 @@
+@@ -0,0 +1,835 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -377,21 +377,22 @@ new file mode 100644
 +		    ufs_rd(REG_HCE), ufs_rd(REG_HCS));
 +		return ENXIO;
 +	}
-+	/* LINK_STARTUP first (the warm path): flash #4 (2026-11-07) proved the
-+	 * boot's second wake hits a device that is ALREADY powered, and
-+	 * DME_POWERON to a live device is rejected (is 0x404, err 0x80000001 -
-+	 * the physical-adapter error ufshcd avoids by never sending POWERON to
-+	 * a live device). If startup fails, the device may be down (the ABL's
-+	 * handoff state / the M2 first-wake scenario): POWERON, then retry.
-+	 * Flash #5: BOTH were refused (the printed 0x10 = the fallback, its
-+	 * err 0 = the ready bit never rose -> ufs_uic_cmd's starved print says
-+	 * which of the two starved and the register state). */
++	/* DME_POWERON then DME_LINK_STARTUP - the M2 recipe's cold order,
++	 * proven on the ABL handoff state in 19 shim rounds (v18/v19 panel:
++	 * PWON -> LINK -> DEVINI -> TUR rc=0). Plan B guarantees this is a
++	 * cold device; POWERON-first matches the proven bytes. If POWERON is
++	 * rejected anyway (a live device, flash #4: err 0x80000001), fall
++	 * through to LINK_STARTUP; and if that fails, retry the pair once. */
++	int pwerr = ufs_uic_cmd(0x10);           /* DME_POWERON */
++	printf("SWEET UFS: wake: poweron rc %d\n", pwerr);
 +	int error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
 +	if (error) {
 +		printf("SWEET UFS: wake: link startup refused (is 0x%x err 0x%x)\n",
 +		    ufs_rd(REG_IS), ufs_rd(0x48));
-+		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON, the cold fallback */
-+			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
++		if (pwerr == 0) {
++			error = ufs_uic_cmd(0x16); /* powered: just retry the startup */
++		} else if (ufs_uic_cmd(0x10) == 0) { /* pair retry, the cold path */
++			error = ufs_uic_cmd(0x16);
 +		}
 +	}
 +	if (error) {
@@ -577,20 +578,27 @@ new file mode 100644
 +static int
 +ufs_take_over_host(void)
 +{
-+	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
-+	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
-+		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x), waking\n", hce, hcs);
-+		int error = ufs_wake_host();
-+		if (error) {
-+			return error;
-+		}
-+		hcs = ufs_rd(REG_HCS);
-+		if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
-+			printf("SWEET UFS: wake left host not ready (hcs 0x%x)\n", hcs);
-+			return ENXIO;
-+		}
-+		su.woke = true;
++	/* Flash #12 (2026-11-07, full panel transcript): the ready gate was a
++	 * miscalibration. The ABL's handoff has the LINK up (hce 1, DP, UTRLRDY)
++	 * but the DEVICE powered down (bPowerMode 0, INACTIVE - the M2 v16 read);
++	 * TUR draws 04/02 'INITIALIZING COMMAND REQUIRED' and every attribute
++	 * write draws GENERIC_FAILURE on that state. The M2 green recipe runs the
++	 * wake UNCONDITIONALLY - HCE reset + DME_POWERON + DME_LINK_STARTUP -
++	 * and with Plan B (the shim no longer wakes) this is the boot's FIRST
++	 * HCE cycle: the state where the recipe is proven green in 19 rounds.
++	 * The UIC starve of flashes #5/#6 was a SECOND-cycle disease; it cannot
++	 * happen here. */
++	printf("SWEET UFS: wake (hce 0x%x hcs 0x%x)\n", ufs_rd(REG_HCE), ufs_rd(REG_HCS));
++	int werr = ufs_wake_host();
++	if (werr) {
++		return werr;
 +	}
++	uint32_t hcs = ufs_rd(REG_HCS);
++	if (!(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
++		printf("SWEET UFS: wake left host not ready (hcs 0x%x)\n", hcs);
++		return ENXIO;
++	}
++	su.woke = true;
 +	if (ufs_rd(REG_UTRLDBR)) {
 +		printf("SWEET UFS: requests outstanding from the bootloader\n");
 +		return EBUSY;
