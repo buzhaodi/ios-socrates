@@ -2,7 +2,7 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): flash #16 READS userdata; new crash in unported SM8250 CPU frequency; flash #17 ready <<<
+### >>> SOCRATES (2026-11-08): flash #17 UFS/GPT/userdata READ SUCCESS; next backups + iOS root image <<<
 
 - Flash #16 image 7eb9e964..., kernel e2022d25..., CI42394687220 SUCCESS,
   UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. UFS fixes are patch0188,
@@ -32,9 +32,17 @@
   UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5 (shim/out-mac/xnu-boot.img).
 - Hardware17 OBSERVED: from user-confirmed unlocked Android, adb reboot
   bootloader then fastboot boot; Sending21388KB OKAY0.493s, Booting OKAY
-  0.102s, total0.600s. No flash/erase. Panel outcome still pending.
-- NEXT: user photo of userdata/root-ready/skip line and the mount result. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
-  skipped', then root filesystem mount failure (Android userdata still there).
+  0.102s, total0.600s. No flash/erase.
+- Hardware17 photo NOW OBSERVED: userdata on LUN0, first block0x2f7840,
+  229451MiB, read-only; 'socrates root ready; unported SM8250 peripherals
+  skipped'; 'BSD root: ufsroot0B, major1, minor0'; HFS unknown signature152e,
+  mount error22 / cannot mount root errno19, repeated attempts2..5.
+  UFS/GPT/root-device read probe PASS. No more cpufreq MMIO abort. Root
+  filesystem/userland NOT achieved: existing Android data is not an HFS root.
+- NEXT: locate/complete M0 backups and choose Linux/WSL root build host.
+  User has been asked for existing backup location and Linux availability.
+  Local IPSW20H392/d22ap manifest verified; OS/SystemOS/AppOS extracted to
+  research/ipsw/iPhone10_3-20H392; ZIP CRC and SHA256 recorded in root-inputs.json. No Linux/FUSE/HFS tools/VM present locally.
 - Sheng reference reviewed at user request: upstream689400177f93,
   CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
   per-core votes, turbo filtering and touch/frame boosts. Port needs our

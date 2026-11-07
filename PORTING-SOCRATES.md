@@ -816,8 +816,37 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   max frequencies before enabling SMP/governor. Flash17 keeps its identical
   prior ADT/cpus=1 to isolate the root-probe fix.
 
+### 2026-11-08 — flash #17 panel: UFS storage/root-device probe SUCCESS
+
+- User photo DIRECTLY CONFIRMS:
+  `SWEET UFS: "userdata" on LUN 0: first block 0x2f7840, 229451 MiB, read-only`
+  `SWEET UFS: socrates root ready; unported SM8250 peripherals skipped`
+  `BSD root: ufsroot0B, major 1, minor 0`
+  HFS unknown Volume Signature152e; hfs_mountfs error22, cannot mount root
+  errno19; retries2..5 visible. The unported cpufreq data abort is gone.
+- Milestone distinction: UFS/GPT/userdata read and BSD root-device registration
+  are HARDWARE-PROVEN. M4 as a whole (iOS root/launchd/SpringBoard) is NOT done.
+  The root data is still Android's partition content; no iOS HFS+ image was
+  installed. The mount rejection is expected at this stage, not another UFS
+  initialization failure. Root probe was read-only; Android partitions unchanged.
+- Root preparation preflight: local IPSW iPhone10,3/iPhone10,6 version16.7.16
+  build20H392 verified via BuildManifest, d22ap Erase identity. OS image
+  087-86698-044.dmg (4730814044B), SystemOS087-86593-047.dmg (2743074816B),
+  AppOS087-86715-047.dmg (10485760B); extraction COMPLETE, ZIP CRC validated
+  and SHA256 recorded in research/ipsw/iPhone10_3-20H392/root-inputs.json
+  (all Apple artifacts gitignored). OS hash80f426d5..., SystemOS9cd738f3...,
+  AppOS391f2df3.... Mac has about87GiB free;
+  Linux apfs-fuse/HFS utilities and Docker/Colima/Lima are absent.
+- No backup/, recovery/ or research/ios-root directory found in this checkout.
+  This does not prove backups do not exist elsewhere. Asked user for existing
+  backup location and available Linux/WSL environment; response pending.
+
 ### Next concrete actions
-1. Flash17 temporarily booted; user to capture panel. Observe userdata,
-   peripheral-skip message, then filesystem mount failure expected on Android.
-2. M0 recovery backups before any root installation; then Linux/WSL iOS root
-   build. Writing userdata requires explicit destructive-step confirmation.
+1. Root inputs ready. Locate/complete M0 partition backups and verify hashes.
+   Confirm available Linux/WSL build host (user question pending).
+2. Build/tweak/check the HFS+ iOS root and sparse image, preserve artifact
+   hashes and review concrete write target `/dev/block/by-name/userdata`.
+3. ONLY after explicit destructive-step user confirmation, write existing
+   userdata (no GPT changes; keep bootloaders/recovery/modem/persist/backups).
+4. Temporary boot with the installed iOS root, then launchd/display and the
+   K60-only CPU/touch/GPU/Wi-Fi adaptations using the banked sheng references.
