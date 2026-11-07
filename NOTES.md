@@ -2,20 +2,20 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 09:45): flash #6 VERDICT — both UIC commands STARVED (UIC layer wedged by the boot's 2nd HCE cycle); Plan B built: shim wake compiled out, kernel wake = first HCE cycle; flash #7 image d0ded551… ready <<<
+### >>> SOCRATES (2026-11-07 10:30): flash #7 BREAKTHROUGH — ABL link ALIVE (Plan B right); TUR CHECK CONDITION = needs fDeviceInit; 0187 built (kernel 30792767, CI 42322510617 green); flash #8 image b6a8cf19… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Flash #6 instrumented verdict: LINK_STARTUP and POWERON both STARVED (st 0x0, err 0x0 -
-  the UIC ready bit never returns after the boot's second HCE=0/1). A controller-level
-  wedge, not protocol. Plan B: shim pre-XNU wake compiled out (NUFS_WAKE re-enables);
-  the kernel's wake is now the FIRST HCE cycle of the boot - the M2-proven scenario.
-  Disassembly-verified: zero wake calls in the shim binary.
-- Flash #7 image shim/out-mac/xnu-boot.img sha d0ded5512037e077440ca98d698e1e3b577ee0
-  ce55ab9cef996e0d5a5b659221 (instrumented kernel + rd=ufsroot0 + kryo470 x8).
-- NEXT: (user) flash #7. Success = 'wake: link re-established' -> fDeviceInit -> TUR ->
-  'userdata on LUN 0' -> mountroot panic = M4 probe done. Then M0 backups, then the iOS
-  root build into userdata (destructive; explicit confirmation required - AGENTS.md).
+- Flash #7: no wake lines (ABL handoff passes the ready gate directly - the shim's
+  pre-XNU wake was the poison of flashes #2-#6), list takeover OK, TUR x3 CHECK
+  CONDITION (response 0x1 status 0x2) = the M2 needs-init disease. Cure: patch 0187
+  (rides after the series; 0028's context is owned by 0030/0034): on TUR failure run
+  ufs_dev_init() then retry. 187 patches validate + strict-chain green.
+- Flash #8 image shim/out-mac/xnu-boot.img sha b6a8cf19b13e5a842666d3894acc4ea3334c30
+  1a83f32b19e72885c8ea22d588 (Plan B shim + 0187 kernel + rd=ufsroot0 + kryo470 x8).
+- NEXT: (user) flash #8. Success = 'userdata on LUN 0' + mountroot panic = M4 probe
+  done. Then M0 backups, then the iOS root build into userdata (destructive; explicit
+  confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

@@ -460,9 +460,29 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   works, the panel shows the full success chain; if not, the starved/refused lines now
   describe the FIRST HCE cycle's behavior (a much more fundamental datum).
 
+### 2026-11-07 — flash #7 = THE BREAKTHROUGH; 0187 built (flash #8 b6a8cf19…)
+
+- Flash #7 (d0ded551, Plan B): NO wake lines at all - the ABL's handoff passed the
+  kernel's ready gate directly (link UP at bsd_init time; Plan B was right, and flashes
+  #2-#6 were all poisoned by the shim's own pre-XNU wake). The list takeover passed.
+  TUR then CHECK-CONDITIONed on all 3 retries (response 0x1, status 0x2, printed by
+  the kernel's command line) -> panic :5. That response/status pair is the M2
+  first-flash disease: the device sits in needs-init state - bDeviceInit never set.
+- The v19 cure, kernel-side, landed as patch 0187 (NOT in 0028: 0030/0034 patch that
+  function's interior byte-for-byte; 0187 rides after the series, authored against the
+  real 186-patch final tree with difflib, strict git-apply verified: 187 patches, zero
+  refused). On TUR failure: ufs_dev_init() (SET fDeviceInit + poll) then the TUR loop
+  again.
+- CI 42322510617 green, kernel 30792767… Flash #8 image shim/out-mac/xnu-boot.img sha
+  b6a8cf19b13e5a842666d3894acc4ea3334c301a83f32b19e72885c8ea22d588 (Plan B shim +
+  0187 kernel + rd=ufsroot0 + kryo470 x8, verified inside).
+- Flash #8 expected: (no wake) -> TUR fail x3 -> 'set fDeviceInit' path -> TUR GREEN ->
+  GPT -> 'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' ->
+  'BSD root: ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
+
 ### Next concrete actions
-1. (user) M4 probe flash #7 (Plan B), image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha d0ded551…): same drill. The kernel wake is now the boot's first HCE cycle.
+1. (user) M4 probe flash #8, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha b6a8cf19…): same drill. Success = the userdata partition line + mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
