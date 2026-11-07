@@ -631,10 +631,45 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Flash #14 panel = the full decision data set: attrs / nop / luns / SSU / ctl-dump,
   plus TUR's sense on every failure. One photo resolves the next move.
 
+### 2026-11-08 — flash #14 verdict (systematic dump) → flash #15: the wake returns to the shim; the kernel handles a HIBERNATED link (db920a98…)
+
+- Flash #14 (d0ca2216; user transcript) — the systematic dump resolved both open cases:
+    attr idn 0x00 = 0x0        bBootLUNEn = 0 CONFIRMED (the READ works)
+    attr idn 0x01 rc 253        bCurrentPowerMode idn does not exist here (0xFD)
+    nop out rc 0                THE LINK + UTP PIPELINE ARE HEALTHY
+    report luns rc 5            04/02 (the LU refuses I/O - not the link)
+    SSU: key 0x5 asc/ascq 0x24  05/24 INVALID FIELD IN CDB
+    ctl: hce 0x1 hcs 0x10f is 0x6 ucmd 0x1 uecdl 0 uecpa 0
+  => The ABL handoff is EXACTLY M2's v17 wall (bBootLUNEn=0, writes 255, SSU 05/24,
+     TUR 04/02) - and M2's only cure was the FULL wake recipe. The kernel cannot run
+     it (kernel HCE resets wedge the UIC layer, flashes #6/#13) => THE WAKE RETURNS TO
+     THE SHIM (Plan B inverted; the M2-proven environment).
+  => The flashes #2-#6 'hcs 0x8 at kernel time' now have a mechanism: the shim-woken
+     link HIBERNATES during the ~2.5 s of kernel bootstrap (DP drops in hibernate).
+     The kernel's fallback wake is ufshcd's routine: DME_HIBERNATE_EXIT (0x11) ->
+     DME_LINK_STARTUP (0x16), POWERON only as the powered-down fallback. NO HCE RESET
+     anywhere in the kernel; the #14 systematic pass (attrs/nop/luns/SSU/ctl dumps)
+     stays behind it.
+- CI round for this had one compile-era lesson banked earlier (the 42388882077
+  use-before-declare round): new local gates before kernel pushes now assemble the
+  real 187-patch file, syntax-check the new functions with clang, and verify
+  decl-before-call on the assembled file.
+- CI 42392404120 green, kernel c4b47630…, shim rebuilt (f2d16f4a…, the mtime gate
+  correctly demanded it). Flash #15 image shim/out-mac/xnu-boot.img sha db920a98a28ac4
+  87ea6bfab25a52c8e72a62b2df53a39f934079bb9416df413f (shim wake + hib8-exit kernel
+  wake + the systematic pass, verified inside).
+- Flash #15 panel: red shim 'UFS WAKE final rc=0' (the M2 full recipe, red lines) ->
+  XNU -> probe -> 'wake: hib8 exit rc 0' -> 'link startup rc 0' -> 'link
+  re-established' -> fDeviceInit (rc 0 expected - the wake re-armed the need) -> NOP
+  -> TUR GREEN -> GPT -> 'SWEET UFS: "userdata" on LUN 0' -> mountroot panic = M4
+  PROBE SUCCESS. If the hibernate theory is wrong, the #14 dump lines appear again and
+  the photo still decides.
+
 ### Next concrete actions
-1. (user) M4 probe flash #14, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha d0ca2216…): same drill. The photo needs the SWEET UFS block: attr/nop/luns/SSU
-   rc lines and (if it fails) the ctl dump - one photo carries the whole decision set.
+1. (user) M4 probe flash #15, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha db920a98…): same drill. The red shim wake lines should end 'final rc=0';
+   then the kernel: 'hib8 exit rc 0' -> 'link startup rc 0' -> fDeviceInit -> TUR ->
+   'userdata on LUN 0' -> mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
