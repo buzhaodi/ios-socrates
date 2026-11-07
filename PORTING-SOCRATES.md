@@ -46,7 +46,8 @@ SoC facts (from the Kalama QCM DTB block):
   ITS `0x17140000`, maintenance IRQ 9. (apollo: 0x17a00000/0x17a60000 — moved on SM8550.)
 - **Arch timer**: 19.2 MHz (`0x124f800`); vtimer PPI 11; memtimer frame `0x17420000`.
 - **CPUs**: 8x Kryo, **MPIDR 0x000-0x700**, PSCI enable-method, clusters
-  silver 0-3 / gold 4-6 / prime 7 (capacity-dmips differ per node).
+  silver 0-2 / gold 3-6 / prime 7 (**3+4+1**, corrected by live Android
+  policy0/policy3/policy7 on2026-11-08; earlier4+3+1 summary was wrong).
 - **cpufreq**: `qcom,cpufreq-epss`, 3 domains at `0x17d91000`, `0x17d92000`, `0x17d93000`
   (same EPSS driver family as apollo's sweet_cpufreq).
 - **UFS**: HC `0x1d84000`/0x3000 (same address as apollo), ICE `0x1d88000`/0x8000,
@@ -734,7 +735,39 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Local gates PASS:189-patch validation/replay, strict git apply0189,
   20 executable C mock cases (9 kernel UFS,4 shim,7 board token parsing),
   SCSI layouts and root-registration-before-board-gate ordering.
-- User confirmed Android restarted/unlocked and USB connected. CI/image next.
+- User confirmed Android restarted/unlocked and USB connected. Commit08b23ef;
+  CI42396141835 running, validation PASS.
+- User clarified target scope: K60 Pro only; donor-device support is not a
+  requirement for this project. No extra work should be spent preserving it.
+- Android read-only inspection: userdata -> /dev/block/sda32; /data is f2fs
+  through device mapper, confirming no iOS root has been installed yet.
+
+### 2026-11-08 — sheng CPU-frequency reference checked at the user's request
+
+- Upstream: UniXNU/UniXNU-sheng main commit `689400177f93219a38bd7cf5ae2e9f5782adc594`,
+  package/CpuFreqProbe.cpp (363 lines; the archived socrates copy only had
+  the older fixed-frequency modes, so upstream was checked directly).
+  https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/package/CpuFreqProbe.cpp
+- Useful SM8550 facts/implementation: domain windows0x17d91000/0x17d92000/
+  0x17d93000; L3=0x17d90000, vote offset0x90; enable0x0, state0x20,
+  DCVS control0xb0, frequency LUT0x100 (4-byte rows), performance state0x320.
+  Per-core performance registers need votes when DCVS control bit0 is set.
+  LUT selection excludes turbo rows, honors caps/floors and terminates at
+  repeated frequencies; disabled clusters are deferred rather than voted.
+- LIVE K60 Pro validation, read-only Android sysfs (not copied from sheng):
+  policy0 related CPUs=0,1,2 (max2016000kHz); policy3 CPUs=3,4,5,6
+  (max2803200kHz); policy7 CPU=7 (max3187200kHz). Correct topology3+4+1;
+  old fact-bank4+3+1 was incorrect. Available lists also read successfully.
+- Upstream mode4 governor:16ms windows, idle-derived busiest-core load,
+  up immediately/down after4 windows, touch boost, GPU-frame floor and
+  hardware throttling telemetry. These depend on sheng_cpu_idle_mach
+  (recount), sheng HID/GPU counters and IOKit helpers; this XNU8796 tree uses
+  different sample/boost APIs. This is a design/reference source, not a
+  drop-in patch. Thermal sensor/control details still require K60 validation.
+- Next CPU milestone: first adapt a default-off, read-only SM8550 EPSS/L3
+  probe; verify real LUT/domain enable state, then conservative capped votes,
+  then adapt load/temperature/boost policy. Keep flash17 storage isolation
+  while that foundation is prepared; do not re-enable the Apollo governor.
 
 ### Next concrete actions
 1. Build0189 with GitHub Actions, pack flash17 with the current corrected shim;

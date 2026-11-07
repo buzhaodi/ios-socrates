@@ -23,9 +23,19 @@
 - Local gates PASS:189 patches replay; strict git apply0189;20 executable
   mock cases (9 kernel UFS,4 shim UFS,7 compatible parsing) plus layout/order.
 - User restarted into Android and unlocked it, USB connected (explicit reply).
-- NEXT: commit/push0189, build with gh, pack matching flash #17, temporarily
-  boot. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
+- Target scope (user2026-11-08): K60 Pro ONLY; other devices need not be
+  supported. Avoid spending effort on donor-device compatibility.
+- Commit08b23ef; CI42396141835 RUNNING (validation already PASS).
+- Android read-only facts: userdata=/dev/block/sda32; /data uses f2fs via
+  device mapper. This is not an iOS HFS root yet.
+- NEXT: inspect CI42396141835, pack matching flash #17, temporarily boot. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
   skipped', then root filesystem mount failure (Android userdata still there).
+- Sheng reference reviewed at user request: upstream689400177f93,
+  CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
+  per-core votes, turbo filtering and touch/frame boosts. Port needs our
+  XNU8796 sample APIs. Detailed findings in PORTING-SOCRATES.md.
+- Live Android confirms3+4+1 topology (CPUs0-2/3-6/7), correcting old4+3+1
+  fact bank. Max frequencies2016/2803.2/3187.2MHz.
 - M0 backups and iOS root build/install remain. NO partition writes; explicit
   destructive-step confirmation required before writing userdata.
 
