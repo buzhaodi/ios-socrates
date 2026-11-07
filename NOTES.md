@@ -39,10 +39,13 @@
   mount error22 / cannot mount root errno19, repeated attempts2..5.
   UFS/GPT/root-device read probe PASS. No more cpufreq MMIO abort. Root
   filesystem/userland NOT achieved: existing Android data is not an HFS root.
-- NEXT: locate/complete M0 backups and choose Linux/WSL root build host.
-  User has been asked for existing backup location and Linux availability.
+- User confirms OS images under research/ipsw and a running Ubuntu VM in
+  Parallels Desktop. Guest access/dependencies/shared-folder mapping are not
+  inspected yet. M0 partition-backup location/coverage remain unverified.
+- NEXT: inspect that Ubuntu VM for the root build and locate/complete M0 backups.
   Local IPSW20H392/d22ap manifest verified; OS/SystemOS/AppOS extracted to
-  research/ipsw/iPhone10_3-20H392; ZIP CRC and SHA256 recorded in root-inputs.json. No Linux/FUSE/HFS tools/VM present locally.
+  research/ipsw/iPhone10_3-20H392; ZIP CRC and SHA256 recorded in root-inputs.json. Native Linux/FUSE/HFS tools and Docker/Colima/Lima were absent from PATH;
+  this does NOT mean no VM exists (Parallels Ubuntu is user-confirmed).
 - Sheng reference reviewed at user request: upstream689400177f93,
   CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
   per-core votes, turbo filtering and touch/frame boosts. Port needs our
@@ -54,6 +57,10 @@
   but needs our ABI. LIVE K60 GPU=Adreno740v2, touch=goodix_ts; donor touch is
   Novatek, so reuse GENI SPI/HID layers, write Goodix protocol. Wi-Fi Ath12kWifi
   candidate; K60 exact radio PCI ID still denied/unverified. No firmware installed.
+- README/milestone refresh requested by user: M0 unverified; M1/M2/M3 and
+  M4a storage probe DONE; M4b root inputs ready/image not built; M4c userland
+  and M5-M9 device driver adaptations pending. README build instructions now
+  dispatch CI on socrates, series count189, and flash17 evidence is current.
 - M0 backups and iOS root build/install remain. NO partition writes; explicit
   destructive-step confirmation required before writing userdata.
 

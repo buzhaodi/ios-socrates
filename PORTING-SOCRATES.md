@@ -24,20 +24,31 @@ We port *forward* inside the modern SM8250 lineage, while beryllium went *backwa
 | touch | Novatek SPI | Novatek (same vendor) | **Goodix SPI — the one new-vendor driver to write** |
 | panel | 1080x2400 | 1080x2246 | **1440x3200 — 1.8x the copy cost; the fps/heat budget is ours to lose** |
 
-## Milestones
+## Milestones — verified status on 2026-11-08
 
-| # | Goal | Needs | Done when |
-|---|------|-------|-----------|
-| 0 | Backups + device facts | Recovery with adb (OrangeFox/TWRP for socrates), live DTB | persist/modemst1/2/fsg/fsc/boot/dtbo/vbmeta (+ the chosen root partition) saved and SHA256-verified on both sides |
-| 1 | Shim boots, screen colour | socrates constants in the shim (below); boot image accepted by the K60 Pro's ABL | solid colour / text on the panel from `fastboot boot` |
-| 2 | UFS read | the shim's UFS driver against SM8550's controller (same HC address as apollo) | shim reads GPT + the payload/root from UFS |
-| 3 | XNU reaches fbcon | mkadt.py socrates facts; kernel patch 0004 (machine config) + QEMU first (`tools/qemu-sweet.py` exists) | kernel log on the panel, no panic |
-| 4 | iOS root, launchd | build-ios-root.sh (iPhone X IPSW 16.7.16), display geometry for 1440x3200 | SpringBoard drawing |
-| 5 | Touch | Goodix SPI driver (new vendor — the one real new-driver job) | taps work |
-| 6 | Buttons, backlight, CPU freq | PM8550-family GPIO keys + WLED; EPSS domains | buttons/backlight/clocks work |
-| 7 | GPU | Adreno 740: a740 GMU firmware, zap shader; Mesa freedreno a7xx | GPU-drawn UI |
-| 8 | Wi-Fi / BT | identify K60 radio; sheng ath12k candidate for WCN7850 | scan, WPA2, internet |
-| 9 | Audio / haptics | WCD9385-class codec + amps; haptic motor | sound, vibration |
+The target is K60 Pro only. A source implementation or donor-device result is
+not a K60 hardware pass. M4 is split so storage success is not confused with
+launchd or SpringBoard success.
+
+| # | Goal | Status | Evidence / completion criterion |
+| --- | --- | --- | --- |
+| 0 | Partition backups | Not verified | Locate/create and SHA256-check persist/modemst1/2/fsg/fsc/boot/dtbo/vbmeta and the chosen root partition backup before destructive installation |
+| 1 | Shim and panel console | Done | Temporary boot displays shim text on the real K60 Pro panel |
+| 2 | Shim UFS read | Done | M2 verified TUR, six LUNs and GPT enumeration |
+| 3 | XNU bootstrap and fbcon | Done | QEMU and hardware verified kernel console, GIC/timer and live 60Hz framebuffer heartbeat; console geometry1440x1024 |
+| 4a | Kernel UFS/GPT/BSD root device | Done | Flash17 reads userdata on LUN0 (first0x2f7840,229451MiB,read-only), registers ufsroot0B and reaches filesystem mounting |
+| 4b | Build/install iOS HFS+ root | Inputs ready; image not built | IPSW20H392 and OS/SystemOS/AppOS extracted and hashed; user has Parallels Ubuntu; inspect guest tools/access, build/verify root, complete backups, obtain explicit write confirmation |
+| 4c | launchd/backboardd/SpringBoard | Pending | Requires the installed iOS root; done when SpringBoard draws on K60 Pro |
+| 5 | Goodix touch | Hardware identified; port pending | Android identifies goodix_ts; verify exact Goodix protocol/firmware/IRQ/pins, then taps work |
+| 6 | Buttons/backlight/CPU frequency | Port pending | EPSS reference reviewed and live3+4+1 topology verified; unported SM8250 initializers skipped; done when K60 controls and clock policy work |
+| 7 | GPU acceleration | Hardware identified; port pending | Adreno740v2 confirmed; sheng A740/GMU/SMMU/Metal references reviewed; done when GPU renders K60 UI |
+| 8 | Wi-Fi/Bluetooth | Port pending | Identify K60 radio and board firmware; sheng ath12k is a candidate; done with scan/association/internet and tested Bluetooth |
+| 9 | Audio/haptics | Port pending | Verify K60 codec/amps/motor; done with sound and vibration |
+
+Flash17 build: commit08b23ef, CI[42396141835](https://github.com/buzhaodi/ios-socrates/actions/runs/42396141835)
+SUCCESS; image SHA2568ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a.
+The present HFS signature/mount errors are expected on Android's existing data;
+no iOS root was written and M4b/M4c are not complete.
 
 ## Device fact bank (mined from the socrates vendor DTB — `dtb_00..07`, Kalama QCM block — plus the mik60proios UniXNU campaign, all hardware-proven on this phone)
 
@@ -841,12 +852,30 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   This does not prove backups do not exist elsewhere. Asked user for existing
   backup location and available Linux/WSL environment; response pending.
 
+### 2026-11-08 — README and milestone handoff refreshed; Ubuntu host confirmed
+
+- User confirmed the local OS images are under research/ipsw and a running
+  Ubuntu VM is available in Parallels Desktop. VM guest access, dependencies
+  and shared-folder paths have not been inspected. Earlier absence of native
+  Linux utilities/Docker/Colima/Lima did not establish that no VM exists.
+- README now states the native iOS goal separately from the achieved XNU
+  storage probe, publishes flash17 evidence/CI/image hash, splits M4 into
+  storage / root image / userland, and gives each remaining subsystem its
+  actual identification/research/implementation status. M0 stays unverified;
+  IPSW/system-volume images are distinct from phone partition backups.
+- Updated the matching milestone table here and active NOTES handoff. Kernel
+  series count is189; README builds use explicit dispatch on socrates rather
+  than pushing over main. No kernel changes, device boots or partition writes
+  were made for this documentation update.
+
 ### Next concrete actions
-1. Root inputs ready. Locate/complete M0 partition backups and verify hashes.
-   Confirm available Linux/WSL build host (user question pending).
-2. Build/tweak/check the HFS+ iOS root and sparse image, preserve artifact
+1. Inspect the existing Parallels Ubuntu VM and its access to the local
+   research/ipsw/iPhone10_3-20H392 inputs; verify build dependencies and space.
+2. Locate/complete M0 partition backups and verify hashes; their location and
+   coverage remain unconfirmed.
+3. Build/tweak/check the HFS+ iOS root and sparse image, preserve artifact
    hashes and review concrete write target `/dev/block/by-name/userdata`.
-3. ONLY after explicit destructive-step user confirmation, write existing
+4. ONLY after explicit destructive-step user confirmation, write existing
    userdata (no GPT changes; keep bootloaders/recovery/modem/persist/backups).
-4. Temporary boot with the installed iOS root, then launchd/display and the
+5. Temporary boot with the installed iOS root, then launchd/display and the
    K60-only CPU/touch/GPU/Wi-Fi adaptations using the banked sheng references.
