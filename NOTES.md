@@ -2,19 +2,20 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 11:20): flash #8 — SET fDeviceInit rejected 0xFF (already-done op; the ABL ran bring-up, no HCE reset this boot); dev_init now reads the flag (kernel 8fc51080, CI 42324294218 green); flash #9 image 9f92186f… ready <<<
+### >>> SOCRATES (2026-11-07 12:10): flash #9 — flag CLEAR yet TUR still CHECK-CONDITIONs; the SENSE print built (kernel 5deca0a5, CI 42325979639 green); flash #10 image 99513bb8… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
 - Failure-point trajectory (all photo-decoded): #3 HCE/DP order -> #4 POWERON-rejected ->
-  #5 both UIC refused -> #6 both STARVED (UIC wedged by the 2nd HCE) -> #7 ABL link ALIVE,
-  TUR CHECK CONDITION (needs-init) -> #8 SET fDeviceInit 0xFF (already-done op) -> #9 the
-  flag read after the failed SET (the shim v19 logic, kernel-side).
-- Flash #9 image shim/out-mac/xnu-boot.img sha 9f92186fafdac335e8774ca43f16b676016f3ca4
-  69 64af39078fc1e3385d9a4f (verified inside).
-- NEXT: (user) flash #9. Success = 'userdata on LUN 0' + mountroot panic = M4 probe done.
-  Then M0 backups, then the iOS root build into userdata (destructive; explicit
-  confirmation required - AGENTS.md).
+  #5 both UIC refused -> #6 both STARVED -> #7 ABL link ALIVE, TUR CHECK CONDITION ->
+  #8 SET 0xFF (already-done) -> #9 flag CLEAR, retry TURs still CHECK CONDITION ->
+  #10 sense bytes on every failure line (slen/key/asc/ascq, the shim's dump_response
+  offsets). M2 cross-reference loaded: 04/02 -> SSU POWER_CONDITION=ACTIVE (the v18 cure).
+- Flash #10 image shim/out-mac/xnu-boot.img sha 99513bb864564c2ea7c270b460712f4bb5e7596
+  5a7d7de8d3c3dbaacc12e62a (Plan B shim + 0187 + dev-init fallthrough + sense print +
+  rd=ufsroot0 + kryo470 x8, verified inside).
+- NEXT: (user) flash #10 — the sense names the disease; then M0 backups, then the iOS
+  root into userdata (destructive; explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

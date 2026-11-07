@@ -520,8 +520,8 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 
 ### Next concrete actions
 1. (user) M4 probe flash #10, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha to be banked when the CI lands): same drill — the photo needs the NEW
-   'slen/key/asc/ascq' fields on the command-failure lines.
+   (sha 99513bb8…, kernel 5deca0a5, CI 42325979639): same drill — the photo needs the
+   NEW 'slen/key/asc/ascq' fields on the command-failure lines.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
