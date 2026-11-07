@@ -687,11 +687,15 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   software handoff. Kernel retains no-reset takeover; timeout aborts before
   any queries or SCSI on an uninstalled transfer list.
 - Local verification: 188 patches replay and validate; executable tests run
-  the actual assembled C helpers against a mock controller (9 UIC/query cases
+  the actual assembled C helpers against a mock controller (9 kernel + 4 shim UIC/query cases
   plus SCSI layout/early-abort checks); AArch64 shim builds with no warnings.
 - CI 42394636091 stopped in the Linux regression harness before the kernel
   build: strict C11 did not declare BSD bzero. Fixed the harness with a
   portable memset wrapper (production code unchanged); rerun follows.
+- Fix commits d2f8f3d/1266980; CI 42394687220 validation PASS, full kernel
+  building. Added actual-shim UIC mock execution (4 cases), total13 PASS.
+  Local previous-kernel UUID exactly matches the user transcript; symbol table
+  resolves the panic caller to IOFindBSDRoot.
 - Hardware outcome is UNKNOWN. CI and packed image to follow; no storage writes.
 - References: https://github.com/torvalds/linux/blob/v6.12/include/ufs/ufshci.h ;
   https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;

@@ -33,6 +33,9 @@ HARNESS = r'''
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#ifdef bzero
+#undef bzero
+#endif
 #define bzero(p, n) memset((p), 0, (n))
 #define __builtin_arm_dsb(x) ((void)0)
 #define ETIMEDOUT 60
@@ -110,6 +113,42 @@ int main(void) {
 '''
 
 
+SHIM_HARNESS = r'''
+#include <stdint.h>
+#include <assert.h>
+#include <stdio.h>
+DEFINES
+static uint32_t regs[256], mode, writes;
+static uint64_t timer;
+static uint64_t ticks(void) { timer += 19200; return timer; }
+static uint32_t ufs_rd(uint32_t off) { assert(off != 0xa0); return regs[off/4]; }
+static void ufs_wr(uint32_t off, uint32_t v) {
+    if (off == REG_IS) { regs[off/4] &= ~v; return; }
+    regs[off/4] = v;
+    if (off == REG_UIC_CMD) {
+        writes++;
+        if (mode == 1) return;
+        regs[REG_IS/4] |= IS_UCCS;
+        regs[REG_UIC_ARG2/4] = mode == 2 ? 1 : 0;
+    }
+}
+static void con_hex2(const char *a, const char *b, uint32_t c, const char *d, uint32_t e)
+{ (void)a; (void)b; (void)c; (void)d; (void)e; }
+FUNCTIONS
+int main(void) {
+    regs[REG_HCS/4] = HCS_UCRDY;
+    assert(ufs_uic_cmd(0x16) == 0);
+    mode = 1; regs[REG_IS/4] = IS_UCCS;
+    assert(ufs_uic_cmd(0x16) == 1);
+    mode = 2; assert(ufs_uic_cmd(0x16) == 2);
+    regs[REG_HCS/4] = 0;
+    uint32_t before = writes;
+    assert(ufs_uic_cmd(0x16) == 1 && writes == before);
+    puts("UFS shim: 4 register/timeout regression cases passed");
+}
+'''
+
+
 def main():
     with tempfile.TemporaryDirectory() as work:
         subprocess.run(['python3', str(ROOT/'tools/xnu-series-file.py'), work,
@@ -128,6 +167,14 @@ def main():
         subprocess.run([work+'/test'], check=True)
         # Wire-format bounds for the SCSI commands (kernel + shim diagnostics).
         shim = (ROOT/'shim/ufs.c').read_text()
+        shim_defines = '\n'.join(line for line in shim.splitlines()
+                                 if re.match(r'#define (REG_|HCS_|IS_)', line))
+        shim_func = function(shim, 'ufs_uic_cmd').replace(
+            '__asm__ volatile("dsb sy" ::: "memory");', '(void)0;')
+        shim_c = SHIM_HARNESS.replace('DEFINES', shim_defines).replace('FUNCTIONS', shim_func)
+        path.write_text(shim_c)
+        subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', str(path), '-o', work+'/test-shim'], check=True)
+        subprocess.run([work+'/test-shim'], check=True)
         for code in [source, shim]:
             for opcode, count, byte, expected in [(0xa0, 12, 9, 16), (0x1b, 6, 4, 0x10)]:
                 arrays = re.findall(r'\[\d+\]\s*=\s*\{\s*' + hex(opcode) + r',([^}]+)\}', code)

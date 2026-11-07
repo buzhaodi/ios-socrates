@@ -18,13 +18,19 @@
   SSU ACTIVE byte4=0x10; REPORT LUNS length=16 (was4096); corrected error regs.
 - Shim uses HCS.UCRDY -> HCE reset -> LINK_STARTUP -> correct fDeviceInit
   query/poll -> NOP/TUR; no blind POWERON. AHIT=0 for the polled handoff.
-- Local gates: 188-patch replay/validation PASS; 9 executable mock-controller
+- Local gates: 188-patch replay/validation PASS; 13 executable mock-controller
   regression cases + SCSI layouts PASS; full AArch64 shim build PASS.
 - CI 42394636091 stopped in the Linux regression harness before the kernel
   build: strict C11 did not declare BSD bzero. Fixed the harness with a
   portable memset wrapper (production code unchanged); rerun follows.
-- NEXT: commit/push socrates, dispatch xnu.yml via gh, inspect CI, pack a fresh
-  kernel + shim into flash #16. No partition writes performed or authorized.
+- Commits: d2f8f3d (production fix), 1266980 (Linux harness portability).
+  CI 42394687220: validation PASS, full kernel build RUNNING.
+  Added four actual-shim UIC regression cases locally (13 total PASS);
+  macOS bzero macro compatibility also fixed in the harness.
+- UUID of local previous kernel matches user transcript exactly
+  (DD7A817D-E42A-3838-AF79-A73066B4DBA6); panic caller is IOFindBSDRoot.
+- NEXT: inspect CI 42394687220, pack a fresh kernel + shim into flash #16.
+  No partition writes performed or authorized.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
