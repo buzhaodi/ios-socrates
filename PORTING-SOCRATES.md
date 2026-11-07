@@ -555,10 +555,40 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' -> 'BSD root:
   ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
 
+### 2026-11-07 — flash #12 verdict (full user transcript) — the ready gate was the miscalibration; the wake runs UNCONDITIONALLY (flash #13 421e1e74…)
+
+- Flash #12 (4a652046; the user typed the ENTIRE panel): TUR x3 (key 2, 04/02) -> 'set
+  fDeviceInit error 255, reading the flag' -> TUR x3 (04/02) -> 'bBootLUNEn = 255'
+  (the WRITE_ATTR drew GENERIC_FAILURE) -> NO SSU line (skipped on the failed gate) ->
+  panic :5.
+- Re-reading the M2 campaign log corrected two misreadings:
+  1. bBootLUNEn's WRITE was one of M2's FAILED experiments (v17: 'WRITE_ATTR
+     bBootLUNEn rejected (GENERIC_FAILURE)') — same 255 — NOT part of the green recipe.
+     The GREEN recipe: HCE reset + DME_POWERON + DME_LINK_STARTUP + bDeviceInit + NOP
+     -> TUR rc=0.
+  2. The 'ready gate' (skip the wake when hce/DP/UTRLRDY pass) was wrong: the ABL's
+     handoff is LINK up but DEVICE powered down (bPowerMode 0 INACTIVE, the M2 v16
+     read). 04/02 'INITIALIZING COMMAND REQUIRED' is the device asking for power —
+     and every attribute write on a powered-down device draws GENERIC_FAILURE (both
+     the fDeviceInit SET and the bBootLUNEn write).
+- Fix (b0d8149, CI 42386950747 green, kernel 9fffc301…): ufs_take_over_host runs the
+  wake UNCONDITIONALLY (gate removed; the wake is the boot's FIRST HCE cycle under
+  Plan B — the M2-proven state; the #5/#6 UIC starve was a second-cycle disease).
+  ufs_wake_host back to POWERON-then-LINK_STARTUP (the M2 cold order), live-device
+  fallback retained. su.woke=true -> the existing dev_init/list/0187 chain follows.
+- Flash #13 image shim/out-mac/xnu-boot.img sha 421e1e74e6e1ddd426a544f89c28114fcc6b
+  4a3e9773890a7727394ba1a81fc0 (verified inside).
+- Flash #13 expected: 'wake (hce 0x1 hcs 0xB)' -> 'wake: poweron rc 0' ->
+  'wake: link re-established' -> fDeviceInit (rc 0 expected now — the HCE reset
+  re-armed the need) -> NOP -> TUR GREEN -> GPT -> 'SWEET UFS: "userdata" on LUN 0:
+  first block 0x…, N MiB, read-only' -> 'BSD root: ufsroot0' -> mountroot panic =
+  M4 PROBE SUCCESS.
+
 ### Next concrete actions
-1. (user) M4 probe flash #12, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 4a652046…): same drill. Success = 'bBootLUNEn rc 0' -> 'SSU ACTIVE rc 0' ->
-   'userdata on LUN 0' -> mountroot panic.
+1. (user) M4 probe flash #13, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 421e1e74…): same drill. The kernel now wakes the device unconditionally —
+   expect 'wake: poweron rc 0' -> 'link re-established' -> 'userdata on LUN 0' ->
+   mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
