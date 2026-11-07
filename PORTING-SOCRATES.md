@@ -32,12 +32,12 @@ launchd or SpringBoard success.
 
 | # | Goal | Status | Evidence / completion criterion |
 | --- | --- | --- | --- |
-| 0 | Partition backups | Not verified | Locate/create and SHA256-check persist/modemst1/2/fsg/fsc/boot/dtbo/vbmeta and the chosen root partition backup before destructive installation |
+| 0 | Critical-partition backups | Done locally (limited scope) | 126 partitions +12 GPT ranges,138 files,3385278464B; device/local hashes and GPT CRCs pass. User does not retain personal data; userdata/super/cust omitted |
 | 1 | Shim and panel console | Done | Temporary boot displays shim text on the real K60 Pro panel |
 | 2 | Shim UFS read | Done | M2 verified TUR, six LUNs and GPT enumeration |
 | 3 | XNU bootstrap and fbcon | Done | QEMU and hardware verified kernel console, GIC/timer and live 60Hz framebuffer heartbeat; console geometry1440x1024 |
 | 4a | Kernel UFS/GPT/BSD root device | Done | Flash17 reads userdata on LUN0 (first0x2f7840,229451MiB,read-only), registers ufsroot0B and reaches filesystem mounting |
-| 4b | Build/install iOS HFS+ root | Inputs ready; image not built | IPSW20H392 and OS/SystemOS/AppOS extracted and hashed; user has Parallels Ubuntu; inspect guest tools/access, build/verify root, complete backups, obtain explicit write confirmation |
+| 4b | Build/install iOS HFS+ root | Built/verified; install pending | 16GiB HFS root and sparse image pass fsck, file/ownership/hardlink checks, sparse round-trip and host hashes; explicit userdata-write confirmation pending |
 | 4c | launchd/backboardd/SpringBoard | Pending | Requires the installed iOS root; done when SpringBoard draws on K60 Pro |
 | 5 | Goodix touch | Hardware identified; port pending | Android identifies goodix_ts; verify exact Goodix protocol/firmware/IRQ/pins, then taps work |
 | 6 | Buttons/backlight/CPU frequency | Port pending | EPSS reference reviewed and live3+4+1 topology verified; unported SM8250 initializers skipped; done when K60 controls and clock policy work |
@@ -868,14 +868,75 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   than pushing over main. No kernel changes, device boots or partition writes
   were made for this documentation update.
 
+### 2026-11-08 — Ubuntu root-builder ready; local critical backup in progress
+
+- User authorized agent-made backups, explicitly LOCAL ONLY / never Git.
+  User then clarified no personal data needs retaining and the goal is later
+  Android fastboot restoration. Raw userdata backup omitted on that basis;
+  retain device-specific calibration/baseband and current boot/recovery/GPT.
+  This is NOT permission yet for a destructive userdata write.
+- Live Android Magisk root works. Inventory135 by-name entries includes six
+  whole-LUN aliases (sda..sdf), which must NOT be mistaken for partitions.
+  Backup selects126 actual partitions excluding userdata/super/cust, and
+  12 primary/backup GPT ranges (first/last1MiB of each UFS LUN), about3.15GiB.
+  Destination backup/2026-11-08-socrates-critical, mode0700, ignored by Git;
+  per-file local size/SHA256 compared against source device SHA256.
+  Android build metadata and partition inventory stay only in that directory.
+- Ubuntu24.04.3 ARM64 via prlctl, guest root access,48GiB free. Existing shared
+  folders preserved; added read-only ios-socrates-input project share and
+  read-write ios-socrates-output restricted to research/ios-root.
+- Installed HFS/sparse/FUSE/build dependencies. Guest GitHub clone hit a TLS
+  failure; fetched pinned source archives on host and built in guest instead.
+  apfs-fuse66b86bd525e8cb90f9012543be89b1f092b75cf3, lzfse
+  e634ca58b4821d9f3d560cdc6df5dec02ffc93fd. Three APFS mounts, launchd
+  executable read, system plist and44 shared-cache files totaling3330359296B
+  verified. Source handles LZBITMAP; no lax/decompression bypass used.
+- Base root build started with tools/mkiosroot.sh into guest
+  /var/tmp/ios-socrates-root-20H392/ios16-root.img (16GiB). Source Apple files
+  remain on the host, read-only; no phone partitions written.
+
+### 2026-11-08 — local backup COMPLETE; iOS root BUILT and VERIFIED; approval pending
+
+- Backup138/138 files PASS:126 actual partitions +12 GPT ranges,3385278464B.
+  Each local SHA256 equals its source device hash; independent reread after
+  fsync passes; all12 GPT header and entry-array CRCs pass. Critical backup
+  scope excludes personal userdata and stock super/cust, reflecting user's
+  no-personal-data / later-Android-fastboot-restoration goal. Phone was read
+  through existing Magisk root while Android ran; no phone partitions written.
+  backup/2026-11-08-socrates-critical and every manifest/log remain LOCAL and
+  gitignored. User was notified completion; no backup bytes uploaded to Git.
+- tools/mkiosroot.sh created the baseline16GiB case-sensitive journaled HFS+
+  root in Parallels Ubuntu, followed by existing root-tweaks/root-install.
+  No sweet-userland binaries were available; GPU/touch/network remain later
+  work. Root verification: correct16.7.16/20H392, launchd/dyld/SpringBoard and
+  keybag present with root ownership,44 shared-cache hardlinks verified,
+  final fsck read-only says volume appears OK. Android sparse decode produces
+  exactly the raw SHA256. Exported host file sizes and SHA256 both match.
+- Host artifacts under research/ios-root (gitignored):
+  raw ios16-root.img,17179869184B,
+  e2f63a63ebd1c1977caf3ca94473326fc635efc3b4dd6a7c8957b4c7903f1d2c;
+  sparse ios16-root.simg,12145762628B,
+  c35889d44ac5599f103aff1819cc5987db2a3dcceec60d469a5c8a999c3bb160.
+  Proofs: image-manifest.json,root-verification.json,final-fsck.log,SHA256SUMS
+  and INSTALL-PLAN.txt. Guest temporary large image copies removed only after
+  host verification; guest tool source and build/verification logs retained.
+- Prepared temporary first-root boot18, NOT BOOTED:
+  shim/out-mac/xnu-ios-root-boot.img,
+  SHA25624f5852b6d42014ff19e39b692ec14da3a791d2c9433838691ea333ba178beb5.
+  Same proven kernel08b23ef/CI42396141835; no new kernel CI needed. Payload
+  adds ignition_level=1,unentitled_ios_sim_launch=1,launchd_unsecure_cache=1,
+  ufsrw=1/rootrw=1. Existing probe17 image retained unchanged. Shim/DTB/new
+  payload bytes checked inside final boot image.
+- Target ready for review: EXISTING userdata, /dev/block/sda32,
+  240597577728B; root raw size17179869184B fits. Planned command (NOT RUN):
+  fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
+  Explicit destructive-step user confirmation still required before this.
+
 ### Next concrete actions
-1. Inspect the existing Parallels Ubuntu VM and its access to the local
-   research/ipsw/iPhone10_3-20H392 inputs; verify build dependencies and space.
-2. Locate/complete M0 partition backups and verify hashes; their location and
-   coverage remain unconfirmed.
-3. Build/tweak/check the HFS+ iOS root and sparse image, preserve artifact
-   hashes and review concrete write target `/dev/block/by-name/userdata`.
-4. ONLY after explicit destructive-step user confirmation, write existing
-   userdata (no GPT changes; keep bootloaders/recovery/modem/persist/backups).
-5. Temporary boot with the installed iOS root, then launchd/display and the
-   K60-only CPU/touch/GPU/Wi-Fi adaptations using the banked sheng references.
+1. Ask explicit confirmation to overwrite userdata with the verified sparse
+   root (personal Android data is not backed up). Do not change GPT or flash
+   bootloader/recovery/modem/persist; keep backups local and intact.
+2. Only after confirmation: reboot into bootloader, verify target size, flash
+   userdata, then temporarily boot18 and capture HFS mount/launchd results.
+3. Continue K60-only CPU/touch/GPU/Wi-Fi adaptations from sheng references;
+   root-image validation does not prove userland or graphics work on hardware.

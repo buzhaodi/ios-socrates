@@ -25,12 +25,12 @@ HFS then rejects the existing partition content (`unknown Volume Signature: 152e
 
 | # | Milestone | Status | Hardware evidence / remaining work |
 | --- | --- | --- | --- |
-| 0 | Partition backups | Not verified | Locate or create backups and verify SHA-256 before any destructive installation; the IPSW is an OS source, not a phone backup |
+| 0 | Critical-partition backups | Done locally (limited scope) | 126 partitions + 12 GPT ranges, 138 verified files (~3.153 GiB); device/local hashes and GPT CRCs pass. Personal userdata and stock super/cust images omitted; backups never uploaded |
 | 1 | Shim and panel console | Done | Temporary boot displays the shim report on the 1440×3200 panel |
 | 2 | Shim UFS read | Done | TUR, six LUNs and GPT enumeration verified during the M2 campaign |
 | 3 | XNU bootstrap and console | Done | Kernel runs on SM8550 with GIC/timer interrupts and a live 60 Hz framebuffer heartbeat; console currently uses 1440×1024 |
 | 4a | Kernel UFS / GPT / BSD root device | Done | Flash #17 reads `userdata` on LUN 0, registers `ufsroot0B`, and reaches filesystem mount attempts |
-| 4b | Build and install iOS root | Inputs ready; image not built | Local 20H392 IPSW and three extracted system volumes verified; Ubuntu VM available in Parallels, guest access/dependencies still to inspect; installation awaits backups and explicit confirmation |
+| 4b | Build and install iOS root | Image built and verified; installation pending | 16 GiB HFS+ root and ~11.31 GiB sparse file ready locally; HFS check, key files, sparse round-trip and exported hashes pass. Userdata write awaits explicit confirmation |
 | 4c | launchd → backboardd → SpringBoard | Pending | Requires a valid installed iOS root; no iOS user interface has run on K60 Pro yet |
 | 5 | Goodix touch | Hardware identified; port pending | Live Android reports `goodix_ts`; sheng uses Novatek, so its controller protocol cannot be copied directly |
 | 6 | Buttons, backlight, CPU frequency | Port pending | Live CPU topology is **3+4+1** (CPUs 0–2 / 3–6 / 7); sheng EPSS/L3 implementation reviewed; old SM8250 drivers remain skipped |
@@ -48,10 +48,10 @@ Full device facts, source pins and flash-by-flash results: [`PORTING-SOCRATES.md
 
 ## Next steps
 
-1. Locate/complete and hash-check partition backups. Keep bootloaders, recovery, modem, persist and the backups intact.
-2. Inspect the user's Parallels Ubuntu VM and build a verified HFS+ iOS root from the local images. `research/ipsw/` contains the IPSW; `research/ipsw/iPhone10_3-20H392/` contains the extracted OS, SystemOS and AppOS volumes plus `root-inputs.json` with their SHA-256 hashes. These inputs are not a ready-to-install root image.
-3. Obtain explicit confirmation for the concrete `userdata` write, then install there without changing GPT. Continue using temporary boot images.
-4. Bring up launchd/display, then adapt K60 Pro peripherals individually. Start CPU work with a read-only EPSS/L3 probe; use the banked sheng references for GPU, SPI/HID and Wi-Fi integration. Correct the remaining CPU clock metadata in `mkadt.py` before enabling SMP/governor work.
+1. Review the verified root image and installation plan under `research/ios-root/`. The Parallels Ubuntu build is complete; Apple source images remain under `research/ipsw/iPhone10_3-20H392/`. Critical backups are local under `backup/2026-11-08-socrates-critical/` and are not distributed in this repository.
+2. Obtain explicit confirmation to overwrite existing `userdata` with `ios16-root.simg`; personal Android data is not backed up. Keep GPT, bootloaders, recovery, modem, persist and backups intact.
+3. Temporarily boot the prepared `shim/out-mac/xnu-ios-root-boot.img` and verify HFS mounting and launchd. This root image has not yet booted on hardware.
+4. Bring up display/userland and adapt K60 Pro peripherals individually. Start CPU work with a read-only EPSS/L3 probe; use the banked sheng references for GPU, SPI/HID and Wi-Fi integration. Correct remaining CPU clock metadata in `mkadt.py` before enabling SMP/governor work.
 
 ## How it boots
 

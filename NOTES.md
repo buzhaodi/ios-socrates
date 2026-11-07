@@ -2,67 +2,56 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): flash #17 UFS/GPT/userdata READ SUCCESS; next backups + iOS root image <<<
+### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata write awaiting explicit approval <<<
 
-- Flash #16 image 7eb9e964..., kernel e2022d25..., CI42394687220 SUCCESS,
-  UUID D7B355EB-37AB-3C4C-A1B5-F4BD8C299869. UFS fixes are patch0188,
-  production commit d2f8f3d; shim and query protocol corrected. Android intact.
-- OBSERVED in user photo: Kernel data abort PC0xfffffe0007530dfc,
-  LR0xfffffe0007530de0, ESR0x96000010, FAR0xfffffe31182a1100.
-  Matched kernel symbol/disassembly: sweet_cpufreq_init+0x118,
-  `ldr w11,[x0,#0x100]`, first EPSS LUT read at SM8250 PA0x18591100.
-- PROVEN by control flow: sweet_ufs_rootdev reached CPU init AFTER successful
-  GPT/userdata lookup, device registration and su.ready=true. Storage probe
-  milestone is achieved; filesystem mount is NOT observed yet. The prior
-  UFS timeout is gone; the next bug is calling an unported Apollo driver.
-- Patch0189: match xiaomi,socrates in the bounded NUL-separated root compatible
-  list, return after UFS root registration and BEFORE all unported SM8250
-  CPU/GPU/input/USB/RPMh/audio/etc initialization calls. Apollo path unchanged.
-  Do not just change CPUFREQ_DOMAIN_PA: SM8550 TSENS/domain topology and the
-  remaining driver defaults still need porting in later milestones.
-- Local gates PASS:189 patches replay; strict git apply0189;20 executable
-  mock cases (9 kernel UFS,4 shim UFS,7 compatible parsing) plus layout/order.
-- User restarted into Android and unlocked it, USB connected (explicit reply).
-- Target scope (user2026-11-08): K60 Pro ONLY; other devices need not be
-  supported. Avoid spending effort on donor-device compatibility.
-- Commit08b23ef; CI42396141835 SUCCESS.
-- Android read-only facts: userdata=/dev/block/sda32; /data uses f2fs via
-  device mapper. This is not an iOS HFS root yet.
-- Flash17 verified image8ba7285a..., kernel21b7798c...,
-  UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5 (shim/out-mac/xnu-boot.img).
-- Hardware17 OBSERVED: from user-confirmed unlocked Android, adb reboot
-  bootloader then fastboot boot; Sending21388KB OKAY0.493s, Booting OKAY
-  0.102s, total0.600s. No flash/erase.
-- Hardware17 photo NOW OBSERVED: userdata on LUN0, first block0x2f7840,
-  229451MiB, read-only; 'socrates root ready; unported SM8250 peripherals
-  skipped'; 'BSD root: ufsroot0B, major1, minor0'; HFS unknown signature152e,
-  mount error22 / cannot mount root errno19, repeated attempts2..5.
-  UFS/GPT/root-device read probe PASS. No more cpufreq MMIO abort. Root
-  filesystem/userland NOT achieved: existing Android data is not an HFS root.
-- User confirms OS images under research/ipsw and a running Ubuntu VM in
-  Parallels Desktop. Guest access/dependencies/shared-folder mapping are not
-  inspected yet. M0 partition-backup location/coverage remain unverified.
-- NEXT: inspect that Ubuntu VM for the root build and locate/complete M0 backups.
-  Local IPSW20H392/d22ap manifest verified; OS/SystemOS/AppOS extracted to
-  research/ipsw/iPhone10_3-20H392; ZIP CRC and SHA256 recorded in root-inputs.json. Native Linux/FUSE/HFS tools and Docker/Colima/Lima were absent from PATH;
-  this does NOT mean no VM exists (Parallels Ubuntu is user-confirmed).
-- Sheng reference reviewed at user request: upstream689400177f93,
-  CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
-  per-core votes, turbo filtering and touch/frame boosts. Port needs our
-  XNU8796 sample APIs. Detailed findings in PORTING-SOCRATES.md.
-- Live Android confirms3+4+1 topology (CPUs0-2/3-6/7), correcting old4+3+1
-  fact bank. Max frequencies2016/2803.2/3187.2MHz.
-- Expanded sheng audit DONE (details/pins in PORTING-SOCRATES.md): GPU A740
-  and SM8550 GMU/SMMU reusable candidates; AdrenoMetal uses metal2vulkan/Turnip
-  but needs our ABI. LIVE K60 GPU=Adreno740v2, touch=goodix_ts; donor touch is
-  Novatek, so reuse GENI SPI/HID layers, write Goodix protocol. Wi-Fi Ath12kWifi
-  candidate; K60 exact radio PCI ID still denied/unverified. No firmware installed.
-- README/milestone refresh requested by user: M0 unverified; M1/M2/M3 and
-  M4a storage probe DONE; M4b root inputs ready/image not built; M4c userland
-  and M5-M9 device driver adaptations pending. README build instructions now
-  dispatch CI on socrates, series count189, and flash17 evidence is current.
-- M0 backups and iOS root build/install remain. NO partition writes; explicit
-  destructive-step confirmation required before writing userdata.
+- Target is K60 Pro ONLY. User authorized local backups and explicitly forbids
+  uploading them to Git. User does not need personal data retained; goal is
+  later Android fastboot restoration. No raw userdata backup; super/cust also
+  omitted (stock system images). Device-specific/boot/GPT backup IS complete.
+- Backup: backup/2026-11-08-socrates-critical (gitignored, mode0700),138 files,
+  3385278464B (~3.153GiB):126 actual named partitions +12 GPT head/tail ranges
+  of six UFS LUNs. Device/local SHA256 match for every file, independent local
+  reread after fsync PASS, all12 GPT header/entry-array CRC checks PASS.
+  Manifest/SHA256SUMS/inventory/Android build metadata/restore notes stay LOCAL.
+  Whole-LUN aliases were excluded. Source was running Android with Magisk root;
+  no phone partition writes. User has been notified backup is complete.
+- Root inputs: local IPSW16.7.16/20H392 d22ap Erase identity, three APFS system
+  volumes extracted/hashed under research/ipsw/iPhone10_3-20H392.
+- Ubuntu24.04.3 ARM64 in Parallels; prlctl exec guest root works. Read-only
+  ios-socrates-input share and research/ios-root-only read-write output share.
+  Dependencies installed; apfs-fuse66b86bd525e8cb90f9012543be89b1f092b75cf3,
+  lzfse e634ca58b4821d9f3d560cdc6df5dec02ffc93fd compiled from pinned archives.
+- ROOT READY on Mac (research/ios-root):
+  ios16-root.img =17179869184B (16GiB), SHA256
+  e2f63a63ebd1c1977caf3ca94473326fc635efc3b4dd6a7c8957b4c7903f1d2c.
+  ios16-root.simg =12145762628B, SHA256
+  c35889d44ac5599f103aff1819cc5987db2a3dcceec60d469a5c8a999c3bb160.
+  Existing mkiosroot/root-tweaks/root-install scripts used; no sweet-userland
+  binaries present, so this is a baseline root with GPU/touch/Wi-Fi still pending.
+- Verification PASS: APFS executable decompression, iOS version/build, launchd /
+  dyld / SpringBoard / keybag existence and ownership,44 shared-cache hardlinks,
+  final HFS fsck 'appears to be OK', sparse->raw full SHA256 equality, and Mac
+  exported copies size/SHA256. image-manifest.json/root-verification.json and
+  INSTALL-PLAN.txt are local under research/ios-root. Guest large temporary
+  image copies removed AFTER host verification; guest logs/tools retained.
+- Prepared first-root temporary boot18: shim/out-mac/xnu-ios-root-boot.img,
+  SHA25624f5852b6d42014ff19e39b692ec14da3a791d2c9433838691ea333ba178beb5.
+  Same kernel08b23ef/CI42396141835 (SUCCESS), UUID13B38CEA-2E65-3B80-8BA1-
+  E1DA7873C5D5; boot args add ignition_level=1, unentitled_ios_sim_launch=1,
+  launchd_unsecure_cache=1, ufsrw=1/rootrw=1. Packed shim/DTB/payload verified.
+  This boot image is PREPARED ONLY; not booted, no userdata writes authorized.
+- Previous hardware milestone: flash17 probe8ba7285a... read userdata on LUN0,
+  first0x2f7840,229451MiB,read-only, BSD ufsroot0B; HFS mount fails on Android
+  data. Patch0188 fixed UFS protocol;0189 skips unported SM8250 peripherals.
+- NEXT: obtain explicit destructive-step confirmation for installing the
+  verified sparse root into EXISTING userdata (/dev/block/sda32,240597577728B).
+  Planned command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
+  Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups. Do NOT
+  flash until user confirms. Then temporarily boot18 and inspect root/launchd.
+- K60 adaptation references banked in PORTING-SOCRATES.md: live3+4+1 CPU layout
+  (0-2/3-6/7), max2016/2803.2/3187.2MHz; Adreno740v2; goodix_ts. Sheng EPSS /
+  L3/A740/GMU/SMMU/GENI/HID/ath12k audit done. Exact radio ID unverified.
+  mkadt.py clock metadata still needs correction before SMP/governor work.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
