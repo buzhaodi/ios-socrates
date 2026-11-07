@@ -71,7 +71,7 @@ Run on the user's Kali PC from ~/ios-apollo on `main` (research/, shim/out, reco
 **Everything boot 125 (2026-11-05, Metal agent: Turnip 0102 + xnu 0184-0186 + libsweet-ui flashlight fix):** kernel xnu run 41986740065 (main 2d6ae18: Metal 0172-0180, PMIC/battery/UI 0181-0183, 0184 submit diagnostics, 0185 flip-frame leak fix, 0186 switches as --option; 41844548555 = up to 0184), sweet-metal2 metal2 run 41845122846 (LTO plug-in + Turnip 0101+0102: both on the root this time), sweet-ui ui run 41842152626 (the other agent's boot 124 fix). Same options. If mkadt says more than 48 MiB: drop `--files-from tools/root-files/turnip-update.txt` (then Turnip stays boot 119's, without 0102). Read back: `grep -a -E 'SWEET MTL|SWEET FB: [0-9]|SweetGPU: (the display|watchdog|10 s)|SWEET PROF|MTL2T|MTL2\[|native-metal|darwin:|CRASH (backboardd|SpringBoard)|apollo pmic:|SWEET BATTERY'`.
 
 ```sh
-cd ~/ios-apollo && git pull && R=aTechGeekDev/ios-apollo &&
+cd ~/gittest/ios-socrates && git pull && R=buzhaodi/ios-socrates &&
 gh run watch 41986740065 -R $R --exit-status && gh run watch 41845122846 -R $R --exit-status &&
 rm -rf xnu/out sweet-metal2 sweet-ui &&
 gh run download 41986740065 -R $R -n xnu-kernel -D xnu/out &&
@@ -95,7 +95,7 @@ shim/build.sh ../shim/out/payload.bin && fastboot boot shim/out/shim-boot.img
 **(SUPERSEDED by boot 125 above) Everything boot (2026-11-04, user: "the boot command w everything"):** boot 120 (Metal, xnu 0172-0180) + the PMIC/battery/status-bar work (xnu 0181-0183), all from main 08ee2b9: kernel xnu run 41837987204 (main 58a6b38: torch writable by SpringBoard; 41837027398 died on bearssl.org; 41832275728 = boot 122), sweet-metal2 41827349433, sweet-ui ui run 41837027762 (island rect + flashlight). Options through the ADT (`--option`, the boot line is full): apollo_rtc=1 apollo_power=1 apollo_torch=1 sweetbattery=1 apollo_ui=1. Needs boot 119's Turnip on the root (metal2-on.txt only carries the plug-in). Read back: `grep -a -E 'apollo pmic:|SWEET BATTERY|SWEET FB: [0-9]|SweetGPU: (the display|watchdog|10 s)|SWEET PROF|MTL2T|native-metal|CRASH (backboardd|SpringBoard)'`; photo of the status bar.
 
 ```sh
-cd ~/ios-apollo && git pull && R=aTechGeekDev/ios-apollo &&
+cd ~/gittest/ios-socrates && git pull && R=buzhaodi/ios-socrates &&
 gh run watch 41837987204 -R $R --exit-status &&
 rm -rf xnu/out sweet-metal2 sweet-ui &&
 gh run download 41837987204 -R $R -n xnu-kernel -D xnu/out &&
@@ -119,7 +119,7 @@ shim/build.sh ../shim/out/payload.bin && fastboot boot shim/out/shim-boot.img
 **iOS on Metal boot (next, 119: new Turnip + xnu 0176):** kernel xnu run 41824286340 (0172-0176, a33d6a8), sweet-metal2 metal2 run 41824286474 (Turnip with turnip/patches/0101 ring-order waits); `--files-from tools/root-files/turnip-update.txt` only (the plug-in and /var/local/mtl2-tu-debug = nocb are on the root since boot 118); boot-arg `sweetmtl=2`; no GL bridge. Read back: `grep -a -E 'SWEET FB: [0-9]|SweetGPU: (the display|watchdog|10 s)|SWEET SURF: rows|MTL2T|MTL2\[|native-metal|CRASH backboardd'`.
 
 ```sh
-cd ~/ios-apollo && git pull && R=aTechGeekDev/ios-apollo &&
+cd ~/gittest/ios-socrates && git pull && R=buzhaodi/ios-socrates &&
 gh run watch 41824286340 -R $R --exit-status && gh run watch 41824286474 -R $R --exit-status &&
 rm -rf xnu/out sweet-metal2 &&
 gh run download 41824286340 -R $R -n xnu-kernel -D xnu/out &&
@@ -140,7 +140,7 @@ shim/build.sh ../shim/out/payload.bin && fastboot boot shim/out/shim-boot.img
 **iOS on Metal boot 120 (after 119: needs boot 119's Turnip on the root):** kernel xnu run 41827766480 (0172-0179, b54a81e), sweet-metal2 metal2 run 41827349433 (HotMetal2 with the LTO bridge; Turnip unchanged from 119); `--files-from tools/root-files/metal2-on.txt` (the plug-in; not turnip-update.txt again: plug-in + Turnip together pass the 48 MiB limit). Read back: `grep -a -E 'SWEET FB: [0-9]|SweetGPU: (the display|watchdog|10 s)|SWEET CPUFREQ|SWEET TOP|SWEET SURF: rows|MTL2T|native-metal|CRASH backboardd'`.
 
 ```sh
-cd ~/ios-apollo && git pull && R=aTechGeekDev/ios-apollo &&
+cd ~/gittest/ios-socrates && git pull && R=buzhaodi/ios-socrates &&
 gh run watch 41827766480 -R $R --exit-status && gh run watch 41827349433 -R $R --exit-status &&
 rm -rf xnu/out sweet-metal2 &&
 gh run download 41827766480 -R $R -n xnu-kernel -D xnu/out &&

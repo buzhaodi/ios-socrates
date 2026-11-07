@@ -1,66 +1,106 @@
 # ios-socrates
 
-**Porting Apple's iOS 16 to run natively on the Xiaomi Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550).
+**iOS 16 running natively on the Xiaomi Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550) — the unmodified iOS 16.7.16 (20H392) system of the iPhone X on XNU (Apple's open-source kernel), patched for this hardware. No emulator, no Android underneath. The port is a fork of the [ios-apollo](https://github.com/aTechGeekDev/ios-apollo) recipe (Mi 10T / SM8250), proven portable by [ios-beryllium](https://github.com/LakoMoor/ios-beryllium) (Poco F1 / SDM845).
 
-This repository is a **clone of [aTechGeekDev/ios-apollo](https://github.com/aTechGeekDev/ios-apollo), modified for the Redmi K60 Pro** — same goal, different phone. The upstream project runs the **unmodified iOS 16.7.16 (20H392) system of the iPhone X** — launchd, SpringBoard, the stock apps — on the Mi 10T (SM8250) with Apple's open-source XNU kernel (xnu-8796) patched for that hardware; no emulator, no Android underneath. [LakoMoor/ios-beryllium](https://github.com/LakoMoor/ios-beryllium) (Poco F1, SDM845) proved the porting method transfers between phones. This fork is the SM8550 port: keep the recipe, replace the hardware constants.
+**Repo**: `https://github.com/buzhaodi/ios-socrates` — the `socrates` branch is the active campaign; it is pushed to both `socrates` and `main`.
 
 > [!WARNING]
-> This is an experiment, not a daily-use phone OS. As in the upstream project, most of Apple's security model is switched off, and installing the iOS root **erases Android's `userdata` partition**.
+> This is an experiment, not a daily-use phone OS. Most of Apple's security model is switched off, and installing the iOS root **erases Android's `userdata` partition**. Every test boot on the phone is a temporary `fastboot boot` — nothing is flashed.
 
 ---
 
 ## Status
 
-The port has XNU running on the phone; the remaining milestones bring up iOS proper. Every test boot is a temporary `fastboot boot` — nothing is flashed. The full plan, the device fact bank and the campaign log live in [`PORTING-SOCRATES.md`](PORTING-SOCRATES.md).
+XNU boots on the phone; the UFS root path is being brought up. Full plan, device facts and the round-by-round campaign log: [`PORTING-SOCRATES.md`](PORTING-SOCRATES.md).
 
 | # | Milestone | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Shim boots, draws on the panel | ✅ Done | `fastboot boot` → shim probe report on the 1440×3200 panel (gzip kernel + the 8-block socrates vendor DTB table) |
-| 2 | Internal UFS read | ✅ Done | TUR rc=0, REPORT LUNS (6 LUNs), SSU rc=0 after a 19-round bring-up; the socrates UFSHCI 4.0 wake-up recipe is in `PORTING-SOCRATES.md` |
-| 3 | XNU reaches fbcon | ✅ Done | **On hardware** (2026-11-06): QEMU run6 green, then the flash #2 photo shows the full SWEET driver set, `AppleCLCD 1440x1024 stride 5760 at 0xb8000000`, and a live 60 Hz vsync heartbeat (`600 vsyncs, 0 skipped, 1.8 ms late`) — the GICv3 routing, arch timer and display engine all work on the real SM8550 |
-| 4 | iOS root, launchd → SpringBoard | 🚧 In progress | M4 probe image built: the shim runs the M2 UFS wake-up recipe before jumping to XNU, the kernel boots with `rd=ufsroot0` so `bsd/dev/sweet_ufs.c` reports the `userdata` GPT partition on the panel. The iOS root itself (`tools/build-ios-root.sh`) and the write into `userdata` come next |
-| 5 | Touch | ❌ Not started | Goodix over SPI — the one new-vendor driver to write (upstream: Novatek) |
-| 6 | Buttons, backlight, CPU freq | ❌ Not started | PM8550-family keys, WLED, EPSS domains (same EPSS driver family as upstream) |
-| 7 | GPU | ❌ Not started | Adreno 740 (upstream: Adreno 650) — a740 GMU firmware + Mesa a7xx |
-| 8 | Wi-Fi / Bluetooth | ❌ Not started | WCN785x-class, ath11k — same driver family as upstream's QCA6390 |
-| 9 | Audio / haptics | ❌ Not started | WCD9385-class codec |
+| 1 | Shim boots, draws on the panel | ✅ Done | `fastboot boot` → shim probe report on the 1440×3200 panel |
+| 2 | Internal UFS read | ✅ Done | 19-round bring-up: TUR rc=0, 6 LUNs, the GPT partition table — the wake-up recipe is in `PORTING-SOCRATES.md` |
+| 3 | XNU reaches fbcon | ✅ Done | On hardware: the full SWEET driver set, `AppleCLCD 1440x1024 stride 5760`, live 60 Hz vsync — GICv3, timer, display all work on the real SM8550 |
+| 4 | iOS root, launchd → SpringBoard | 🚧 In progress | Kernel boots with `rd=ufsroot0`; the kernel-side UFS wake (patch 0187) is converging round by round — see the campaign log |
+| 5-9 | Touch / buttons+backlight / GPU / Wi-Fi / audio | ❌ Not started | The driver milestones open after M4 |
 
-Why SM8550 is expected to be *friendlier* than the beryllium port (full table in [`PORTING-SOCRATES.md`](PORTING-SOCRATES.md)): the port moves *forward* inside the SM8250 lineage — same EPSS cpufreq, same ath11k Wi-Fi family, same UFS controller address (0x1d84000), same audio codec generation. The genuinely new work: Goodix touch, the 1440×3200 panel (~1.8× upstream's frame copy cost), Adreno 740, and the SM8550 moved GIC.
-
-## How it boots (the recipe, unchanged from upstream)
+## How it boots
 
 ```
 Xiaomi bootloader (unlocked)
-  └─ fastboot boot shim-boot.img        temporary: nothing is flashed to boot
-     └─ shim                            loads XNU, an Apple Device Tree and boot options
-        └─ XNU kernel + drivers         UFS storage, display, touch, GPU, Wi-Fi, Bluetooth, audio …
+  └─ fastboot boot xnu-boot.img      temporary: nothing is flashed to boot
+     └─ shim                        loads XNU + the Apple device tree, wakes the UFS
+        └─ XNU kernel (SWEET patches)  187-patch series on xnu-8796.141.3
            └─ iOS root (HFS+)           in the userdata partition
-              └─ launchd → daemons → backboardd + SpringBoard → apps
+              └─ launchd → backboardd → SpringBoard
 ```
 
-## What changed from apollo
+## Build everything (from scratch)
 
-- `shim/` — socrates constants (framebuffer 0xb8000000 1440×3200, GIC at 0x17100000, IMEM restart reason, Mac build via clang+lld) and the SM8550 UFS bring-up
-- `tools/mkadt.py` — the socrates device tree: dram, GIC, panel, UFS, EPSS CPUs at SM8550 clocks, `xiaomi,socrates|qcom,sm8550` compatible
-- `tools/mkbootimg_v0.py` — from ios-beryllium; the K60 Pro's ABL accepts a gzip kernel + the 8-block vendor DTB table
-- `xnu/patches/` — the 189-patch sweet series, unchanged for now; the machine config (0004) and the driver patches (touch/GPU/cpufreq/Wi-Fi) get their socrates pass as each milestone opens
-- `PORTING-SOCRATES.md` — this port's fact bank, plan and campaign log (upstream's equivalent is `NOTES.md`)
+Mac with Xcode command-line tools, Homebrew `clang/llvm`, and `gh` logged in. Python 3 needed. Kernel CI runs on GitHub Actions (macOS runners) — a local kernel build is not required; the kernel binary is downloaded from the CI artifact.
 
-Upstream's documentation — the full feature list, boot options, firmware table, `userland/` programs — describes the Mi 10T state and still applies to everything not yet socratized: see the [apollo website](https://atechgeekdev.github.io/ios-apollo/) and [`NOTES.md`](NOTES.md).
+```bash
+# 0. one-time setup
+brew install llvm gh
+gh auth login
+
+# 1. the device tree (Apple-format ADT; socrates constants inside)
+python3 tools/mkadt.py shim/out/socrates.adt
+
+# 2. the kernel — push a change to xnu/patches/** and the CI builds it:
+git push origin socrates:main
+gh run watch   # the xnu workflow, ~10 min
+gh run download <run-id> -R buzhaodi/ios-socrates -n xnu-kernel -D xnu/out
+#    -> xnu/out/kernel.development.sweet   (sha256 in xnu/out/SHA256SUMS)
+
+# 3. the payload = kernel + ADT + boot args
+python3 tools/mkpayload.py xnu/out/kernel.development.sweet shim/out/socrates.adt \
+  shim/out/payload.bin \
+  --cmdline "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress wdt=-1 sweetfb_noconsole=1 sweetfb_probe=0 ufsrw=0 rootrw=0 rd=ufsroot0"
+
+# 4. the flash image (shim + payload + the 8-block socrates vendor DTB)
+shim/build-mac.sh          # the shim itself (clang + lld; byte-reproducible)
+shim/build-mac-xnu.sh      # packs shim/out-mac/xnu-boot.img
+#    -> verify the printed sha256 against the campaign log
+```
+
+`research/dtb/socrates-all-dtbs.dtb` (the vendor DTB table with the splash nodes injected) is a build input produced by the mik60proios campaign tooling; it is gitignored (device dump). Without it `build-mac.sh` says which file is missing.
+
+### Patch validation before pushing
+
+```bash
+python3 tools/validate-repo.py        # series contiguity + format + replay
+```
+
+Note: the CI applies patches with `git apply` (strict, no fuzz) while validate-repo replays with GNU `patch -f` (fuzz allowed) — a patch that passes validate-repo can still be refused by the CI. When editing `xnu/patches/0028` (whose context 0030/0034 patch byte-for-byte), verify with a strict local chain of the whole series or put the change in a new post-series patch (e.g. `0187`).
+
+## Flash and read the result
+
+The phone has no serial port — the panel is the only console, and photos of it are the evidence channel (OCR: `~/gittest/mik60proios/tools/vision-ocr.swift`).
+
+```bash
+# 1. boot Android fully once, unlock, wait ~30 s  (clears dirty TZ state)
+# 2. one temporary boot per bootloader session:
+fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+# 3. photograph the panel (the kernel log) — including the SWEET UFS lines
+```
+
+Expected success for the M4 probe: the kernel reports `SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only`, sets `BSD root: ufsroot0`, and then panics at `mountroot` (userdata is still f2fs — that panic is the probe's success signal). After any attempt, `fastboot reboot bootloader` before the next `fastboot boot`.
 
 ## Repository layout
 
-Same tree as upstream: `xnu/patches/` (the kernel patches), `shim/` (the boot shim), `wifi/` (the Linux compat layer for ath11k), `userland/` (Mesa, CoreAnimation bridge, audio, Bluetooth), `tools/` (device tree builder, boot packer, iOS root builder), `.github/workflows/` (CI on macOS runners).
+- `xnu/patches/` — the 187-patch series on xnu-8796.141.3 (the SWEET machine config + drivers; socrates work: 0010/0012 early console, 0028 UFS root + wake, 0187 the ABL-handoff dance)
+- `shim/` — the boot shim (aarch64 freestanding, builds with Homebrew clang+lld)
+- `tools/` — `mkadt.py` (Apple device tree builder), `mkpayload.py`, `mkbootimg_v0.py`, `qemu-sweet.py` (the QEMU harness), `build-ios-root.sh` (iPhone X root builder, needs Linux)
+- `wifi/` — the LinuxKPI compat layer for ath11k; `userland/` — Mesa, the CoreAnimation bridge, audio, Bluetooth
+- `.github/workflows/xnu.yml` — the kernel CI (macos-15 runners, Xcode 15 era iig)
+- `PORTING-SOCRATES.md` — **the campaign log**: plan, device fact bank, every flash round
+- `NOTES.md` — the active agent handoff block at the top
 
-Kept out of git (upstream policy, unchanged): partition backups, device dumps, firmware, Apple's files, serial numbers and logs.
+Kept out of git: partition backups, device dumps, firmware, Apple's files, logs (see `.gitignore`).
 
 ## Credits and license
 
-This fork stands on the upstream projects — everything not listed as socrates work above is theirs:
-
-- **[aTechGeekDev/ios-apollo](https://github.com/aTechGeekDev/ios-apollo)** — the whole recipe: the shim, the 189-patch XNU series, the tools, the userland. iOS 16 running on the Mi 10T.
-- **[LakoMoor/ios-beryllium](https://github.com/LakoMoor/ios-beryllium)** — the proof that the recipe ports (SDM845), and `mkbootimg_v0.py`.
+- **[aTechGeekDev/ios-apollo](https://github.com/aTechGeekDev/ios-apollo)** — the recipe this fork carries: the shim, the XNU patch series, the tools, the userland.
+- **[LakoMoor/ios-beryllium](https://github.com/LakoMoor/ios-beryllium)** — the portability proof, and `mkbootimg_v0.py`.
 - **Apple's open-source releases:** xnu, IOHIDFamily, libpthread, hfs. iOS itself belongs to Apple and is not distributed here.
-- Upstream's credits — [hakios-apollo](https://github.com/enesuzun2002/hakios-apollo), [HackiOS](https://github.com/oosexgang/hackios-xnu-kernel), ios-spes, ios-sailfish, [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build), [ipsw](https://github.com/blacktop/ipsw), Mesa, BearSSL, Linux ath11k, FreeBSD LinuxKPI, Xiaomi's kernel source, OrangeFox — apply in full; see upstream's README.
+- Upstream's credits — hakios-apollo, HackiOS, ios-spes, ios-sailfish, [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build), [ipsw](https://github.com/blacktop/ipsw), Mesa, BearSSL, Linux ath11k, FreeBSD LinuxKPI, Xiaomi's kernel source, OrangeFox — apply in full; see upstream's README.
 
 MIT License, see [`LICENSE`](LICENSE).
