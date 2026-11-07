@@ -20,6 +20,9 @@
   query/poll -> NOP/TUR; no blind POWERON. AHIT=0 for the polled handoff.
 - Local gates: 188-patch replay/validation PASS; 9 executable mock-controller
   regression cases + SCSI layouts PASS; full AArch64 shim build PASS.
+- CI 42394636091 stopped in the Linux regression harness before the kernel
+  build: strict C11 did not declare BSD bzero. Fixed the harness with a
+  portable memset wrapper (production code unchanged); rerun follows.
 - NEXT: commit/push socrates, dispatch xnu.yml via gh, inspect CI, pack a fresh
   kernel + shim into flash #16. No partition writes performed or authorized.
 

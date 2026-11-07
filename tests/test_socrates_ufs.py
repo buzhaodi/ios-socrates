@@ -33,6 +33,7 @@ HARNESS = r'''
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#define bzero(p, n) memset((p), 0, (n))
 #define __builtin_arm_dsb(x) ((void)0)
 #define ETIMEDOUT 60
 #define EIO 5

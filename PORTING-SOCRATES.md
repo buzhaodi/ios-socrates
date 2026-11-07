@@ -689,6 +689,9 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Local verification: 188 patches replay and validate; executable tests run
   the actual assembled C helpers against a mock controller (9 UIC/query cases
   plus SCSI layout/early-abort checks); AArch64 shim builds with no warnings.
+- CI 42394636091 stopped in the Linux regression harness before the kernel
+  build: strict C11 did not declare BSD bzero. Fixed the harness with a
+  portable memset wrapper (production code unchanged); rerun follows.
 - Hardware outcome is UNKNOWN. CI and packed image to follow; no storage writes.
 - References: https://github.com/torvalds/linux/blob/v6.12/include/ufs/ufshci.h ;
   https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;
