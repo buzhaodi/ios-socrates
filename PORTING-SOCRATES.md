@@ -608,10 +608,33 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - CI 42388882077 building (kernel for flash #14). No rootfs / rd changes — the
   cmdline stays rd=ufsroot0; the probe is UFS-only, as the review ordered.
 
+### 2026-11-08 — flash #14 image (the systematic pass, d0ca2216…)
+
+- The review pivot landed (f2b7a8c + the decl fix df00c7a): no kernel-side HCE reset of a
+  ready host (flashes #6/#13 proved it wedges the UIC layer); the ABL handoff link is
+  taken over as-is; the wake stays only as the dead-handoff fallback. The root probe
+  walks the M2 playbook on the no-reset state with EVERYTHING dumped for one photo:
+  attr idn 0x00/0x01 = (bBootLUNEn, bCurrentPowerMode READs after flash #12's writes
+  drew 255) -> nop out rc (the UFS-native link ping) -> report luns rc/luns (the M2 v6
+  LUN-enumeration lesson) -> SSU ACTIVE rc -> TUR retries -> on failure 'ctl root
+  probe failed: hce .. hcs .. is .. ucmd .. arg2 .. uecdl .. uecpa ..' (the Linux
+  ufshcd diagnosis axes: never executed / completed with error / link negotiation).
+- CI round 1 (42388882077) died on C99 use-before-declare: in the REAL 186-patch layout
+  the probe calls live in sweet_ufs_init, and the helpers' anchor (before rootdev)
+  landed after them; the hunk extraction also carried a stale 0147 context fragment.
+  Fixed with fwd decls anchored before sweet_ufs_init + canonical helper text, and two
+  NEW local gates before any kernel push: clang -fsyntax-only on the extracted new
+  functions, and the decl-before-call check on the REAL 187-patch assembled file.
+- CI 42390369176 green, kernel 1615817f… Flash #14 image shim/out-mac/xnu-boot.img
+  sha d0ca22166af86b1275ae2d49b47d23372d08e876e8cde7b13ff59c8b25768b90 (all the
+  systematic strings verified inside).
+- Flash #14 panel = the full decision data set: attrs / nop / luns / SSU / ctl-dump,
+  plus TUR's sense on every failure. One photo resolves the next move.
+
 ### Next concrete actions
 1. (user) M4 probe flash #14, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha to be banked when the CI lands): same drill. One photo now carries the whole
-   decision set: attrs / nop / luns / SSU / ctl-dump lines.
+   (sha d0ca2216…): same drill. The photo needs the SWEET UFS block: attr/nop/luns/SSU
+   rc lines and (if it fails) the ctl dump - one photo carries the whole decision set.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
