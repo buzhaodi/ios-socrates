@@ -983,10 +983,25 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   ignored). Earlier /tmp/xnu-applycheck was not the full current patched source;
   use the exact artifact/series when adding a future patch.
 
+### 2026-11-08 — boot18 early boot COMPLETE; UI still zero frames
+
+- Fourth user photo: launchd reports `Early boot complete. Continuing system
+  boot.` at displayed time ~08:23. Repeated `exec xpcproxy` follows, alongside
+  many 10-second framebuffer heartbeats reporting iOS gave0 frames.
+- Observed milestone: early boot complete. SpringBoard/backboardd execution,
+  health and rendering remain unverified. xpcproxy lines alone cannot prove
+  successful service startup or a restart loop. No panic visible in this photo.
+- User told no further passive waiting is required; preserve current phone
+  state while preparing diagnostics. A desktop cannot be promised by waiting,
+  especially with K60 GPU and userland bridge still unported.
+- Correction to prior warning shorthand: kern.prng.user_reseed_count ENOENT
+  is a missing sysctl interface; do not conflate it with absent seed files.
+  Previous warnings did not prevent early boot completion but their later
+  impact is unknown. No new kernel changes, CI, boot or partition writes.
+
 ### Next concrete actions
-1. Observe current first-boot progress until a stable endpoint/panic or iOS UI;
-   user screen is the evidence channel. Capture backboardd/SpringBoard lines.
-2. If an actual stop appears, add focused outcome/process diagnostics; the
-   socrates peripheral gate currently also skips the optional sampler/logger.
-3. Continue K60 CPU/touch/GPU/Wi-Fi adaptation from sheng references. Keep
-   backups local and preserve installed root; no repeat root flash needed now.
+1. Add focused process-state diagnostics for launchd/backboardd/SpringBoard;
+   inspect enabling the existing pure sampler before the socrates hardware gate.
+2. Build/test a temporary diagnostic boot only if needed; no root reflash.
+3. Continue K60 CPU/touch/GPU/Wi-Fi adaptation from the banked references.
+   Keep backups local and preserve installed root and protected partitions.

@@ -2,7 +2,7 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata INSTALLED; boot18 HFS + launchd HARDWARE PASS; early boot progressing, UI pending <<<
+### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata INSTALLED; boot18 HFS + launchd HARDWARE PASS; early boot COMPLETE, zero UI frames <<<
 
 - Target is K60 Pro ONLY. User authorized local backups and explicitly forbids
   uploading them to Git. User does not need personal data retained; goal is
@@ -63,16 +63,23 @@
   3. DONE EARLYBOOT SETUP / DONE UMD_INIT; launchd boot tasks and execs for
      dirs_cleaner,xpcroleaccountd,init_featureflags,auearlyboot,tzinit, etc.
      HFS root and real launchd execution are HARDWARE-PROVEN. No UI yet.
-- No speculative kernel patch was made for the initial pause/trust-cache log:
-  later photos proved progression. Initial root mount/early-boot delay can be
-  long; wait for the current boot to settle before interrupting initialization.
-  Warnings observed: dc_reset /tmp and /var/run EINVAL; timezone symlink paths
-  missing; PRNG seed files absent; CPU-wake Mach message error0x10000003.
-  These did not prevent the shown boot tasks; do not label them fatal blindly.
-- NEXT: user screen updates for backboardd/SpringBoard and a stable endpoint or
-  actual panic; if progress stops, diagnose that endpoint. Future useful step:
-  enable pure process sampling/logging separately from unported hardware init.
-  No further root-image write is currently needed or authorized.
+- Latest user photo OBSERVED: launchd reports 'Early boot complete. Continuing
+  system boot.' at displayed time ~08:23; repeated exec xpcproxy and multiple
+  10-second framebuffer heartbeats follow. Each says iOS gave 0 frames.
+  This proves early boot completion, NOT SpringBoard/backboardd health or UI.
+  xpcproxy repetition alone does not establish a crash/restart loop. No panic
+  visible. Waiting longer has no demonstrated path to a working desktop;
+  user told no further passive wait is needed, keep phone state for diagnosis.
+- No speculative kernel fix made for the initial pause/trust-cache messages.
+  Warnings did not prevent early boot completion, but are not all harmless:
+  timezone link paths are absent; kern.prng.user_reseed_count ENOENT refers to
+  a missing sysctl interface, distinct from a missing seed file. Do not create
+  fake entropy or bypass checks just to suppress output.
+- NEXT: focused process diagnostics for launchd/backboardd/SpringBoard to
+  distinguish absent services, waiting threads and display integration gaps.
+  The socrates gate skips the optional sampler with the unsafe old hardware;
+  inspect enabling the pure sampler independently. No diagnostic patch/build
+  or new phone boot has occurred yet. No repeat root-image write needed.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;
