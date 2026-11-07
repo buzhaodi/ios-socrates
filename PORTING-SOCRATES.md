@@ -584,11 +584,34 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   first block 0x…, N MiB, read-only' -> 'BSD root: ufsroot0' -> mountroot panic =
   M4 PROBE SUCCESS.
 
+### 2026-11-07 — the review pivot: NO kernel-side HCE reset; the systematic pass (flash #14 building)
+
+- The user's review set the strategy: flash #12 already had real SCSI-layer responses
+  (04/02 with sense); flash #13's unconditional reset made it WORSE by failing earlier.
+  The conclusion from all data: an HCE reset FROM THE KERNEL wedges the UIC command
+  layer — flash #6 (second reset) AND flash #13 (FIRST reset; POWERON completed with
+  PA 'already powered' 0x80000001, then everything starved) — while the ABL handoff
+  state completes every query and SCSI command (flashes #7-#12). The kernel takes the
+  link AS THE ABL LEFT IT; the wake is only the fallback for a dead handoff (gate
+  restored in 0028, with the IS-ack + LINK_STARTUP-first fallback order retained).
+- 0187 rewritten as the systematic M2 playbook on the no-reset state, everything
+  dumped for one-photo diagnosis (f2b7a8c):
+    attr idn 0x00/0x01 = …      (READ_ATTR: bBootLUNEn, bCurrentPowerMode)
+    nop out rc N                (NOP OUT: the UFS-native link ping)
+    report luns rc N luns U     (REPORT LUNS: the M2 v6 LUN-enumeration lesson)
+    SSU ACTIVE rc N             (the SCSI 'initializing command' 04/02 asks for)
+    ctl root probe failed: hce .. hcs .. is .. ucmd .. arg2 .. uecdl .. uecpa ..
+                                (the Linux-ufshcd diagnosis axes: never executed /
+                                completed with error / link negotiation failed)
+- 'handshake structure not initialized' (the panic-log footer line) is a red herring -
+  the UIC timeout is the explicit failure; per the review, do not chase it separately.
+- CI 42388882077 building (kernel for flash #14). No rootfs / rd changes — the
+  cmdline stays rd=ufsroot0; the probe is UFS-only, as the review ordered.
+
 ### Next concrete actions
-1. (user) M4 probe flash #13, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha 421e1e74…): same drill. The kernel now wakes the device unconditionally —
-   expect 'wake: poweron rc 0' -> 'link re-established' -> 'userdata on LUN 0' ->
-   mountroot panic.
+1. (user) M4 probe flash #14, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha to be banked when the CI lands): same drill. One photo now carries the whole
+   decision set: attrs / nop / luns / SSU / ctl-dump lines.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.
