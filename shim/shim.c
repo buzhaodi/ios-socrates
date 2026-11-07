@@ -397,16 +397,10 @@ void shim_main(uint64_t dtb)
 	con_clear(RED);
 	con_str("SHIM", "sweet milestone 4: xnu loader");
 	con_skip();
-	/* M4 flash #15 (2026-11-08): the wake is back IN the shim. Flash #14's
-	 * systematic dump proved the ABL handoff is the M2 v17 wall (bBootLUNEn=0,
-	 * attr writes 255, SSU 05/24, TUR 04/02 - exactly what M2 could only
-	 * cure with the FULL wake recipe), and a kernel-side HCE reset wedges the
-	 * UIC layer (flashes #6/#13) - so this is the only place the recipe can
-	 * run. The kernel no longer re-wakes (no HCE reset anywhere in it); its
-	 * fallback handles the HIBERNATED link the wake leaves after ~2.5 s of
-	 * kernel-bootstrap silence: DME_HIBERNATE_EXIT + DME_LINK_STARTUP before
-	 * any TUR (the flashes #2-#6 'hcs 0x8 at kernel time' = link in
-	 * hibernate, DP dropped - the ufshcd hibernate-exit lore). */
+	/* Prepare UFS before XNU, with AHIT disabled for the polled handoff.
+	 * Flash #16 corrects the UIC completion protocol in both drivers.
+	 * Earlier claims of a kernel-reset wedge or hibernation were guesses:
+	 * 0xa0 was being polled instead of IS.UCCS, and 0x11 powered OFF UFS. */
 	stage = "ufs wake";
 	uint32_t ufs_rc = ufs_wake_for_kernel();
 	con_hex2("UFS WAKE", "final rc=", ufs_rc, "db=", 0);

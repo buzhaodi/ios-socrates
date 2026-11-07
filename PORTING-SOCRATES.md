@@ -665,14 +665,39 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   PROBE SUCCESS. If the hibernate theory is wrong, the #14 dump lines appear again and
   the photo still decides.
 
+### 2026-11-08 — flash #15 transcript: protocol errors found; flash #16 in preparation
+
+- OBSERVED: user's full log shows HCE=1/HCS=8; UIC 0x11 first, then 0x16/0x10,
+  all reported timeout, root panic errno60. No phone connected to this Mac.
+- CONFIRMED by Linux v6.12 include/ufs/ufshci.h: 0x11 is DME_POWEROFF,
+  HIBER_EXIT=0x18; 0xa0 is the end of the standard register block, not status.
+  Poll HCS.UCRDY before dispatch, IS.UCCS after, ARG2[7:0] result; HIBER_EXIT
+  additionally waits for IS.UHXS and HCS.UPMCRS=PWR_LOCAL. Preserve UIC errors.
+  Thus #15 actively powered off UFS, and earlier "starved" diagnoses based
+  on 0xa0 do NOT prove a kernel-only reset wedge or hibernation.
+- 0188 also fixes UPIU queries per include/uapi/scsi/scsi_bsg_ufs.h and
+  ufshcd.c: reserved byte4/LUN zero; value bytes20..23, flag byte23, power
+  attribute IDN2. Old byte16 flag reads falsely claimed bring-up was done;
+  old attribute reads do NOT establish bBootLUNEn=0 or inactive power.
+  SSU ACTIVE CDB byte4=0x10 (START bit unsupported by UFS); REPORT LUNS
+  allocation length encoded as16, matching its transfer buffer (was4096).
+  Error registers: UECPA=0x38, UECDL=0x3c, UECDME=0x48.
+- Shim cold bring-up now uses HCE reset -> UCRDY -> LINK_STARTUP -> fDeviceInit
+  real flag poll -> NOP/TUR; disable AHIT so idle hibernate does not race the
+  software handoff. Kernel retains no-reset takeover; timeout aborts before
+  any queries or SCSI on an uninstalled transfer list.
+- Local verification: 188 patches replay and validate; executable tests run
+  the actual assembled C helpers against a mock controller (9 UIC/query cases
+  plus SCSI layout/early-abort checks); AArch64 shim builds with no warnings.
+- Hardware outcome is UNKNOWN. CI and packed image to follow; no storage writes.
+- References: https://github.com/torvalds/linux/blob/v6.12/include/ufs/ufshci.h ;
+  https://github.com/torvalds/linux/blob/v6.12/include/uapi/scsi/scsi_bsg_ufs.h ;
+  https://github.com/torvalds/linux/blob/v6.12/drivers/ufs/core/ufshcd.c
+
 ### Next concrete actions
-1. (user) M4 probe flash #15, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha db920a98…): same drill. The red shim wake lines should end 'final rc=0';
-   then the kernel: 'hib8 exit rc 0' -> 'link startup rc 0' -> fDeviceInit -> TUR ->
-   'userdata on LUN 0' -> mountroot panic.
-2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
-3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
-   phone at hand; nothing destructive.
-4. (agent) M4 proper: build the iOS root (tools/build-ios-root.sh, iPhone X 16.7.16 IPSW,
-   needs Linux/WSL + ~40 GB) and write it into userdata - ONLY with the user's explicit
-   confirmation at that destructive step (AGENTS.md rule).
+1. Build patch0188 via GitHub Actions and pack flash #16 with the matching shim.
+2. Temporary `fastboot boot` on hardware; capture the red shim UIC results and
+   kernel UFS lines. Success: userdata found read-only, then filesystem mount
+   failure expected while Android userdata is still present.
+3. M0 recovery backups before any root installation; then Linux/WSL iOS root
+   build. Writing userdata requires explicit destructive-step confirmation.

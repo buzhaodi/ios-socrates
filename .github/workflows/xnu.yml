@@ -20,6 +20,7 @@ on:
     paths:
       - "xnu/patches/**"
       - "tools/validate-repo.py"
+      - "tests/test_socrates_ufs.py"
       - "tools/mk-wlfw-header.py"
       - "tools/mk-ath11k.sh"
       - "tools/xnu-series-file.py"
@@ -46,6 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/validate-repo.py
+      - run: python3 tests/test_socrates_ufs.py
 
   build:
     needs: validate

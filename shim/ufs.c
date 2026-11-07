@@ -8,7 +8,7 @@
  * written to the device: there is no SCSI WRITE in this file.
  *
  * Milestone 4 wake-up: ufs_wake_for_kernel() runs the M2-proven recipe
- * (HCE reset + DME_POWERON + DME_LINK_STARTUP + bDeviceInit) and leaves the
+ * (HCE reset + DME_LINK_STARTUP + fDeviceInit) and leaves the
  * host with OUR transfer list installed and the link live, so the kernel's
  * ufs_take_over_host (bsd/dev/sweet_ufs.c, xnu 0028) only has to re-point the
  * list at its own DMA block on a warm, initialized device.
@@ -20,6 +20,14 @@
 #include "ufs.h"
 
 #define UFS_BASE	0x01d84000UL	/* ufshc@1d84000, sweet live FDT */
+
+#define REG_AHIT	0x18
+#define REG_IE		0x24
+#define REG_UIC_CMD	0x90
+#define REG_UIC_ARG1	0x94
+#define REG_UIC_ARG2	0x98
+#define REG_UIC_ARG3	0x9c
+#define IS_UCCS		(1u << 10)
 
 #define REG_CAP		0x00
 #define REG_VER		0x08
@@ -255,12 +263,12 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	zero(&utrl[0], sizeof(utrl[0]));
 	zero(&ucd, sizeof(ucd));
 	ucd.cmd[0] = 0x16;			/* QUERY REQUEST */
-	ucd.cmd[2] = 0xd0;			/* the UFS DEVICE W-LUN (ufshcd's target) */
+	ucd.cmd[2] = 0x00;			/* device management, no SCSI LUN */
 	ucd.cmd[3] = ++tag;
 	/* The canonical UPIU header (include/uapi/scsi/scsi_bsg_ufs.h):
 	 * byte 4 = command_set_type (low nibble) | iid, byte 5 = query_function.
 	 * v7 wrote qfunc into byte 4 - a garbage command set type, dropped. */
-	ucd.cmd[4] = 0x02;			/* command_set_type = QUERY */
+	ucd.cmd[4] = 0x00;			/* reserved for query requests */
 	ucd.cmd[5] = qfunc;			/* 0x81 STD WRITE / 0x01 STD READ */
 	ucd.cmd[12] = opcode;
 	ucd.cmd[13] = idn;
@@ -305,25 +313,23 @@ static uint32_t upiu_query(uint8_t opcode, uint8_t idn, uint8_t qfunc)
 	return ucd.resp[6];		/* 0 = success, nonzero = the response code */
 }
 
-/* WRITE_ATTR / SET_FLAG with a value: the osf3 field at [19..22] carries
- * the 4-byte value big-endian (Linux: osf3 = cpu_to_be32(value << 16)
- * for attributes). */
+/* WRITE_ATTR: the 4-byte big-endian query value is at [20..23]. */
 static uint32_t upiu_query_val(uint8_t opcode, uint8_t idn, uint8_t qfunc, uint32_t value)
 {
 	static uint8_t tag;
 	zero(&utrl[0], sizeof(utrl[0]));
 	zero(&ucd, sizeof(ucd));
 	ucd.cmd[0] = 0x16;
-	ucd.cmd[2] = 0xd0;
+	ucd.cmd[2] = 0x00;
 	ucd.cmd[3] = ++tag;
-	ucd.cmd[4] = 0x02;
+	ucd.cmd[4] = 0x00;
 	ucd.cmd[5] = qfunc;
 	ucd.cmd[12] = opcode;
 	ucd.cmd[13] = idn;
-	ucd.cmd[19] = value >> 24;
-	ucd.cmd[20] = value >> 16;
-	ucd.cmd[21] = value >> 8;
-	ucd.cmd[22] = value;
+	ucd.cmd[20] = value >> 24;
+	ucd.cmd[21] = value >> 16;
+	ucd.cmd[22] = value >> 8;
+	ucd.cmd[23] = value;
 	uintptr_t ucd_pa = (uintptr_t)&ucd;
 	utrl[0].dw0 = (1u << 28) | (1u << 24);
 	utrl[0].dw2 = 0x0f;
@@ -364,27 +370,40 @@ static uint32_t ufs_hce_reset(void)
 		;
 	ufs_wr(REG_HCE, 1);			/* enable host controller */
 	t = ticks();
-	while (!(ufs_rd(REG_HCS) & HCS_DP) && ticks() - t < 19200000)
+	while (!(ufs_rd(REG_HCS) & HCS_UCRDY) && ticks() - t < 19200000)
 		;
 	con_hex2("UFS RST", "hcs=", ufs_rd(REG_HCS), "hce=", ufs_rd(REG_HCE));
-	if (!(ufs_rd(REG_HCS) & HCS_DP))
+	if (!(ufs_rd(REG_HCS) & HCS_UCRDY))
 		return 1;
 	return 0;
 }
 
+/* UFSHCI command acceptance is HCS.UCRDY; completion is IS.UCCS.
+ * 0xa0 is outside the standard register block, not a ready register. */
 static uint32_t ufs_uic_cmd(uint32_t cmd)
 {
-	ufs_wr(0x94, 0);  ufs_wr(0x98, 0);  ufs_wr(0x9c, 0);
-	ufs_wr(0x90, cmd);
-	/* The UIC ready bit (0xA0 bit 0) is set when idle; a command makes it
-	 * drop. Wait for it to go low (command accepted) then high (done). */
 	uint64_t t = ticks();
-	while ((ufs_rd(0xa0) & 1) && ticks() - t < 1920000)	/* wait drop: 100 ms */
-		;
+	while (!(ufs_rd(REG_HCS) & HCS_UCRDY)) {
+		if (ticks() - t > 19200000)
+			return 1;
+	}
+	ufs_wr(REG_IS, IS_UCCS);
+	ufs_wr(REG_UIC_ARG1, 0);
+	ufs_wr(REG_UIC_ARG2, 0);
+	ufs_wr(REG_UIC_ARG3, 0);
+	__asm__ volatile("dsb sy" ::: "memory");
+	ufs_wr(REG_UIC_CMD, cmd);
 	t = ticks();
-	while ((ufs_rd(0xa0) & 1) == 0 && ticks() - t < 19200000)	/* wait rise: 1 s */
-		;
-	return (ufs_rd(0xa0) & 1) ? 0 : 1;
+	while (!(ufs_rd(REG_IS) & IS_UCCS)) {
+		if (ticks() - t > 19200000) {
+			con_hex2("UFS UIC timeout", "cmd=", cmd, "is=", ufs_rd(REG_IS));
+			return 1;
+		}
+	}
+	uint32_t result = ufs_rd(REG_UIC_ARG2) & 0xff;
+	con_hex2("UFS UIC", "cmd=", cmd, "result=", result);
+	ufs_wr(REG_IS, IS_UCCS);
+	return result ? 2 : 0;
 }
 
 /* Point the host at OUR transfer list (must be called after every HCE reset:
@@ -417,6 +436,9 @@ static uint32_t ufs_bringup(void)
 	 * the tag echoed, SCSI status 2 and NO sense bytes at all (and the NOP
 	 * OUT got a RESPONSE UPIU instead of a NOP IN). Switch back to legacy.
 	 */
+	ufs_wr(REG_IE, 0);
+	ufs_wr(REG_AHIT, 0);
+	(void)ufs_rd(REG_AHIT);
 	uint32_t mem_cfg = ufs_rd(0x300);
 	con_hex2("UFS MODE", "mem_cfg=", mem_cfg, "mcq_cfg=", ufs_rd(0x380));
 	if (mem_cfg & 1) {
@@ -427,16 +449,15 @@ static uint32_t ufs_bringup(void)
 	uint32_t rc;
 	if ((rc = ufs_hce_reset()))
 		return 10 + rc;
-	if ((rc = ufs_uic_cmd(0x10))) {		/* DME_POWERON */
-		con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
-		return 20 + rc;
-	}
-	con_hex2("UFS RST", "PWON st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
-	if ((rc = ufs_uic_cmd(0x16))) {		/* DME_LINK_STARTUP */
-		con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+	/* A newly enabled UFSHCI host needs LINK_STARTUP, not a blind
+	 * POWERON on an already-powered UniPro layer (Linux ufshcd sequence). */
+	if ((rc = ufs_uic_cmd(0x16))) {
+		con_hex2("UFS RST", "LINK hcs=", ufs_rd(REG_HCS), "dme=", ufs_rd(0x48));
 		return 30 + rc;
 	}
-	con_hex2("UFS RST", "LINK st=", ufs_rd(0xa0), "err=", ufs_rd(0x48));
+	con_hex2("UFS RST", "LINK hcs=", ufs_rd(REG_HCS), "dme=", ufs_rd(0x48));
+	if (!(ufs_rd(REG_HCS) & HCS_DP))
+		return 32;
 	if ((rc = ufs_take_list()))
 		return 40 + rc;
 
@@ -447,18 +468,20 @@ static uint32_t ufs_bringup(void)
 	 * the HCE reset - the reset puts the device back into "needs init" even
 	 * when the flag reads 0 (v18's skip kept TUR at 04/02). */
 	rc = upiu_query(0x05, 0x01, 0x01);	/* READ_FLAG bDeviceInit */
-	con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[16]);
+	con_hex2("UFS DEVINI", "read rc=", rc, "flag=", ucd.resp[23]);
 	rc = upiu_query(0x06, 0x01, 0x81);	/* SET_FLAG bDeviceInit */
 	con_hex2("UFS DEVINI", "set rc=", rc, "resp0=", ucd.resp[0]);
 	/* The device clears bDeviceInit when its bring-up is done. */
-	for (int i = 0; i < 20 && !rc && ucd.resp[16]; i++) {
+	for (int i = 0; i < 20 && !rc; i++) {
 		uint64_t t = ticks();			/* 50 ms at 19.2 MHz */
 		while (ticks() - t < 960000)
 			;
 		rc = upiu_query(0x05, 0x01, 0x01);
+		if (!rc && !ucd.resp[23])
+			break;
 	}
-	con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[16]);
-	if (rc || ucd.resp[16])
+	con_hex2("UFS DEVINI", "poll rc=", rc, "flag=", ucd.resp[23]);
+	if (rc || ucd.resp[23])
 		return 50;
 
 	/* Prove the pipeline: NOP IN, then TUR (unit attention tolerated). */
@@ -520,7 +543,7 @@ void test_ufs(void)
 		return;
 	}
 
-	/* The M2 recipe: MCQ->legacy, HCE reset, DME poweron + link startup,
+	/* The M2 recipe: MCQ->legacy, HCE reset, DME_LINK_STARTUP,
 	 * transfer-list takeover, bDeviceInit, NOP, TUR (see ufs_bringup). */
 	if (ufs_bringup()) {
 		con_str("UFS", "bringup failed (see stages above)");
@@ -532,7 +555,7 @@ void test_ufs(void)
 	 * the host must enumerate the LUNs before addressing them. */
 	uint32_t ocs = 0, st = 0, rc;
 	static uint8_t rl_buf[16];
-	static const uint8_t rl[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0 };
+	static const uint8_t rl[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0 };
 	rc = scsi(0, rl, sizeof(rl), rl_buf, 16, &ocs, &st);
 	con_hex2("UFS RLUNS", "rc=", rc, "ocs/st=", ocs << 8 | st);
 	if (rc == 4)
@@ -550,30 +573,29 @@ void test_ufs(void)
 	 * is ACTIVE(1)/SLEEP(2)/... — both tell us WHY the SCSI LUN is 04/02. */
 	for (int idn = 0; idn < 3; idn++) {
 		uint32_t rc = upiu_query(0x03, idn, 0x01);	/* READ_ATTR */
-		/* the 2-byte attribute value comes in the query response body */
+		/* the 4-byte attribute value comes in the query response body */
 		con_hex2("UFS ATTR", "idn=", idn, "rc=", rc);
 		con_hex2("UFS ATTR", "r0=", ucd.resp[0] | ucd.resp[1] << 8 | ucd.resp[2] << 16 | ucd.resp[3] << 24,
 		    "r1=", ucd.resp[4] | ucd.resp[5] << 8 | ucd.resp[6] << 16 | ucd.resp[7] << 24);
-		/* The attribute value (2 bytes BE) lives in osf3 at [19..20],
-		 * not [15..16] (those are index/selector echoes). */
-		con_hex2("UFS ATTR", "val=", (ucd.resp[19] << 8) | ucd.resp[20],
-		    "body=", ucd.resp[16] | ucd.resp[17] << 8 | ucd.resp[18] << 16 | ucd.resp[19] << 24);
+		/* Query value is a BE32 at bytes 20..23. */
+		con_hex2("UFS ATTR", "val=", be32(ucd.resp + 20),
+		    "body=", ucd.resp[23] | ucd.resp[17] << 8 | ucd.resp[18] << 16 | ucd.resp[19] << 24);
 	}
 
 	/* v16's panel: bBootLUNEn = 0 (boot LU disabled by the ABL) and
 	 * bPowerMode = 0 (inactive). Re-enable the boot LU and force ACTIVE. */
 	{
-		uint32_t rc = upiu_query_val(0x04, 0x00, 0x81, 1 << 16);  /* WRITE_ATTR bBootLUNEn=1 */
+		uint32_t rc = upiu_query_val(0x04, 0x00, 0x81, 1);  /* WRITE_ATTR bBootLUNEn=1 */
 		con_hex2("UFS SETBL", "rc=", rc, "resp0=", ucd.resp[0]);
 		dump_response("UFS SETBL");
 		rc = upiu_query(0x03, 0x00, 0x01);	/* re-READ bBootLUNEn */
-		con_hex2("UFS SETBL", "read rc=", rc, "val=", (ucd.resp[19] << 8) | ucd.resp[20]);
+		con_hex2("UFS SETBL", "read rc=", rc, "val=", be32(ucd.resp + 20));
 	}
 
 	/* SSU with POWER_CONDITION = ACTIVE (bits 7:4 of byte 4 = 1), not
 	 * START_VALID (0) — the 05/24 INVALID FIELD IN CDB on every prior SSU
 	 * points at the power condition field. */
-	static const uint8_t ssu_a[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
+	static const uint8_t ssu_a[6] = { 0x1b, 0, 0, 0, 0x10, 0 };
 	rc = scsi(0, ssu_a, sizeof(ssu_a), 0, 0, &ocs, &st);
 	con_hex2("UFS SSU_A", "rc=", rc, "ocs/st=", ocs << 8 | st);
 	if (rc == 4)

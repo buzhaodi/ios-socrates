@@ -2,19 +2,26 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 14:00): flash #11 — SSU drew INVALID FIELD (asc 0x24) because the ABL disables the boot LU; the bBootLUNEn gate added (kernel 269a3a0d, CI 42329728345 green); flash #12 image 4a652046… ready <<<
+### >>> SOCRATES (2026-11-08): flash #15 failed; standard UFS protocol bugs fixed, flash #16 build pending <<<
 
-- This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
-  Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Failure-point trajectory (photo-decoded): #7 TUR CHECK CONDITION -> #8 SET 0xFF ->
-  #9 flag clear, still refused -> #10 sense key 2 / 04/02 -> #11 SSU INVALID FIELD
-  (bBootLUNEn=0, the M2 v16 lesson) -> #12 the full M2 order kernel-side:
-  TUR -> fDeviceInit -> bBootLUNEn=1 -> SSU ACTIVE -> TUR -> GPT.
-- Flash #12 image shim/out-mac/xnu-boot.img sha 4a6520460843bbb51820c0d59535e9d90cd108
-  557d6f31d2fd52a12c3a36662b (verified inside).
-- NEXT: (user) flash #12. Success = 'bBootLUNEn rc 0' -> 'SSU ACTIVE rc 0' ->
-  'userdata on LUN 0' -> mountroot panic = M4 probe done. Then M0 backups, then the
-  iOS root into userdata (destructive; explicit confirmation required - AGENTS.md).
+- Observed from the user's full transcript: HCE=1/HCS=8; first UIC=0x11;
+  every wake timed out; root panic `ufsroot0 unavailable: 60`. No hardware
+  success for this revision yet. `fastboot devices` is empty on this Mac.
+- Confirmed source bugs (Linux v6.12 UFSHCI/UPIU definitions): 0x11 is
+  DME_POWEROFF, HIBER_EXIT is 0x18; 0xa0 is not standard UIC status.
+  Acceptance = HCS bit3, completion = IS bit10, result = ARG2 low byte.
+  Earlier claims that HCE reset wedges XNU or that HCS=8 proves hibernation
+  were inferences using the wrong completion register, NOT established facts.
+- New patch 0188: standard UIC polling + asynchronous HIBER_EXIT completion,
+  AHIT disabled, no more commands after takeover failure; query reserved
+  header byte/LUN=0, BE32 value bytes20..23, flag byte23, power IDN=2;
+  SSU ACTIVE byte4=0x10; REPORT LUNS length=16 (was4096); corrected error regs.
+- Shim uses HCS.UCRDY -> HCE reset -> LINK_STARTUP -> correct fDeviceInit
+  query/poll -> NOP/TUR; no blind POWERON. AHIT=0 for the polled handoff.
+- Local gates: 188-patch replay/validation PASS; 9 executable mock-controller
+  regression cases + SCSI layouts PASS; full AArch64 shim build PASS.
+- NEXT: commit/push socrates, dispatch xnu.yml via gh, inspect CI, pack a fresh
+  kernel + shim into flash #16. No partition writes performed or authorized.
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 

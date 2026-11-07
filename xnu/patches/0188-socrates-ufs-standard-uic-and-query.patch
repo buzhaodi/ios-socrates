@@ -1,0 +1,316 @@
+From: socrates bring-up
+Subject: [PATCH] UFS: fix UIC completion, HIBER_EXIT and query wire layout
+
+Linux v6.12 include/ufs/ufshci.h, include/uapi/scsi/scsi_bsg_ufs.h
+and drivers/ufs/core/ufshcd.c are the reference for these constants.
+0x11 is POWEROFF, not HIBER_EXIT (0x18). 0xa0 is not a UIC status
+register. Poll HCS.UCRDY then IS.UCCS and read ARG2; preserve error
+evidence and stop after a timeout or failed host takeover.
+
+Query value is bytes 20..23, flag is byte 23, power mode IDN is 2.
+SSU ACTIVE has byte 4 = 0x10; REPORT LUNS allocation length is BE32.
+
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -76,7 +76,11 @@
+ #define REG_UIC_CMD     0x90
+ #define REG_UIC_ARG1    0x94
+ #define REG_UIC_ARG3    0x9c
+-#define REG_UIC_STATUS  0xa0
++#define REG_UIC_ARG2    0x98
++#define REG_AHIT        0x18
++#define HCS_UCRDY       (1u << 3)
++#define IS_UCCS         (1u << 10)
++#define IS_UHXS         (1u << 5)
+ #define REG_MEM_CFG     0x300           /* SM8550 UFSHCI 4.0: bit0 = MCQ mode */
+ 
+ #define HCS_DP          (1u << 0)
+@@ -271,7 +275,7 @@
+ 		printf("SWEET UFS: command 0x%02x failed: ocs 0x%x upiu 0x%x response 0x%x status 0x%x "
+ 		    "slen 0x%x key 0x%x asc/ascq 0x%02x/0x%02x\n",
+ 		    cdb[0], ocs, ucd->resp[0], ucd->resp[6], ucd->resp[7],
+-		    ucd->resp[32] | ucd->resp[33] << 8, ucd->resp[36], ucd->resp[46], ucd->resp[47]);
++		    ucd->resp[32] << 8 | ucd->resp[33], ucd->resp[36], ucd->resp[46], ucd->resp[47]);
+ 		return EIO;
+ 	}
+ 	return 0;
+@@ -374,76 +378,79 @@
+ 	return ENOENT;
+ }
+ 
++/* UFSHCI: HCS.UCRDY accepts a command; IS.UCCS completes it and
++ * ARG2[7:0] is its result. 0xa0 is NOT a standard status register.
++ * Do not require a busy-bit transition: fast completions can be missed. */
+ static int
+ ufs_uic_cmd(uint32_t cmd)
+ {
++	uint32_t mask = IS_UCCS | (cmd == 0x18 ? IS_UHXS : 0);
++	uint32_t status, result;
++	int i;
++
++	for (i = 0; i < 1000 && !(ufs_rd(REG_HCS) & HCS_UCRDY); i++) {
++		delay(1000);
++	}
++	if (!(ufs_rd(REG_HCS) & HCS_UCRDY)) {
++		printf("SWEET UFS: uic 0x%x not ready (hcs 0x%x)\n", cmd, ufs_rd(REG_HCS));
++		return ETIMEDOUT;
++	}
++	ufs_wr(REG_IS, mask);                  /* discard only stale UIC completion */
+ 	ufs_wr(REG_UIC_ARG1, 0);
++	ufs_wr(REG_UIC_ARG2, 0);
+ 	ufs_wr(REG_UIC_ARG3, 0);
+-	/* arg2 (0x98) is not defined for these commands; clear what ABL left */
+-	ufs_wr(0x98, 0);
+-	/* Acknowledge any stale completion/error flags first: flash #13 showed
+-	 * the failed POWERON's IS bits (0x404) staying set and the NEXT UIC
+-	 * command starving with the ready bit dead - the controller will not
+-	 * take a new command while its completion state is unacknowledged
+-	 * (UFSHCI: IS is write-1-to-clear). */
+-	ufs_wr(REG_IS, ufs_rd(REG_IS));
++	__builtin_arm_dsb(0xf);
+ 	ufs_wr(REG_UIC_CMD, cmd);
+-	/* The UIC ready bit drops while the command runs, then rises when done. */
+-	for (int i = 0; i < 100 && (ufs_rd(REG_UIC_STATUS) & 1); i++) {
+-		delay(1);
+-	}
+-	for (int i = 0; i < 1000 && (ufs_rd(REG_UIC_STATUS) & 1) == 0; i++) {
+-		delay(1);
+-	}
+-	/* Acknowledge this command's completion flags too, win or lose. */
+-	ufs_wr(REG_IS, ufs_rd(REG_IS));
+-	if ((ufs_rd(REG_UIC_STATUS) & 1) == 0) {
+-		/* Flash #5: on the boot's second wake the UIC layer can refuse
+-		 * outright (is 0x404, err 0) - the ready bit never returns. Say
+-		 * WHICH command starved and what the registers held. */
+-		printf("SWEET UFS: uic 0x%x starved (st 0x%x is 0x%x err 0x%x)\n",
+-		    cmd, ufs_rd(REG_UIC_STATUS), ufs_rd(REG_IS), ufs_rd(0x48));
++	for (i = 0; i < 1000 && !(ufs_rd(REG_IS) & IS_UCCS); i++) {
++		delay(1000);
++	}
++	status = ufs_rd(REG_IS);
++	result = ufs_rd(REG_UIC_ARG2) & 0xff;
++	printf("SWEET UFS: uic 0x%x is 0x%x result 0x%x hcs 0x%x\n",
++	    cmd, status, result, ufs_rd(REG_HCS));
++	if (!(status & IS_UCCS)) {
+ 		return ETIMEDOUT;
+ 	}
++	ufs_wr(REG_IS, IS_UCCS);
++	if (result) {
++		return EIO;
++	}
++	if (cmd == 0x18) {
++		/* HIBER_EXIT has a second, asynchronous power completion. */
++		for (i = 0; i < 1000 && !(ufs_rd(REG_IS) & IS_UHXS); i++) {
++			delay(1000);
++		}
++		if (!(ufs_rd(REG_IS) & IS_UHXS)) {
++			return ETIMEDOUT;
++		}
++		ufs_wr(REG_IS, IS_UHXS);
++		if (((ufs_rd(REG_HCS) >> 8) & 7) != 1) { /* UPMCRS = PWR_LOCAL */
++			return EIO;
++		}
++	}
+ 	return 0;
+ }
+ 
+-/*
+- * The SM8550 wake-up recipe, proven in 19 shim rounds (M2) and needed again
+- * here: the live link the bootloader (or our shim) leaves behind does NOT
+- * survive into the kernel - by the time bsd_init probes, HCS has lost DP and
+- * UTRLRDY (hce 0x1, hcs UCRDY-only, flash #2 photo 2026-11-06). Rebuild the
+- * link ourselves: MCQ->legacy, HCE reset, DME_LINK_STARTUP (DME_POWERON only
+- * as the cold fallback), then the transfer list + bDeviceInit in the normal path.
+- */
++/* Recover a missing link without resetting a live controller. Earlier
++ * campaigns inferred a reset wedge using a reserved register as completion;
++ * that inference is unproven. Never send 0x11 here: it is DME_POWEROFF. */
+ static int
+ ufs_wake_host(void)
+ {
+-	/* Flash #15 (2026-11-08): NO HCE reset - a kernel-side reset wedges the
+-	 * UIC command layer (flashes #6 and #13, both first and second cycle).
+-	 * The only wake state the kernel can meet: the shim's fully-woken link
+-	 * that HIBERNATED during the ~2.5 s of kernel bootstrap (the flashes
+-	 * #2-#6 'hcs 0x8 at kernel time': DP drops in hibernate). The cure is
+-	 * ufshcd's routine: DME_HIBERNATE_EXIT, then DME_LINK_STARTUP. The
+-	 * POWERON fallback stays for a genuinely powered-down device. */
+-	int error = ufs_uic_cmd(0x11);           /* DME_HIBERNATE_EXIT */
+-	printf("SWEET UFS: wake: hib8 exit rc %d\n", error);
+-	error = ufs_uic_cmd(0x16);               /* DME_LINK_STARTUP */
+-	printf("SWEET UFS: wake: link startup rc %d\n", error);
++	int error = ufs_uic_cmd(0x18);          /* DME_HIBER_EXIT */
++	printf("SWEET UFS: wake: hibern8 exit rc %d\n", error);
++	if (error && error != ETIMEDOUT) {
++		error = ufs_uic_cmd(0x16);     /* not hibernating: LINK_STARTUP */
++		printf("SWEET UFS: wake: link startup rc %d\n", error);
++	}
+ 	if (error) {
+-		printf("SWEET UFS: wake: link startup refused (is 0x%x err 0x%x)\n",
+-		    ufs_rd(REG_IS), ufs_rd(0x48));
+-		/* the cold fallback: the device may be powered down */
+-		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON */
+-			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
+-		}
++		return error;                  /* no new commands after a timeout */
+ 	}
+ 	for (int i = 0; i < 1000 && !(ufs_rd(REG_HCS) & HCS_DP); i++) {
+-		delay(1);
++		delay(1000);
+ 	}
+ 	if (!(ufs_rd(REG_HCS) & HCS_DP)) {
+-		printf("SWEET UFS: wake: no device present after link startup (hce 0x%x hcs 0x%x)\n",
+-		    ufs_rd(REG_HCE), ufs_rd(REG_HCS));
++		printf("SWEET UFS: wake: no device present (hcs 0x%x)\n", ufs_rd(REG_HCS));
+ 		return ENXIO;
+ 	}
+ 	printf("SWEET UFS: wake: link re-established (hcs 0x%x)\n", ufs_rd(REG_HCS));
+@@ -467,9 +474,9 @@
+ 	bzero(utrd, sizeof(*utrd));
+ 	bzero(ucd, sizeof(*ucd));
+ 	ucd->cmd[0] = 0x16;                     /* QUERY REQUEST */
+-	ucd->cmd[2] = 0xd0;                     /* the DEVICE W-LUN */
++	ucd->cmd[2] = 0x00;                     /* device management, no SCSI LUN */
+ 	ucd->cmd[3] = ++su.tag;
+-	ucd->cmd[4] = 0x02;                     /* command set type = QUERY */
++	ucd->cmd[4] = 0x00;                     /* reserved for query requests */
+ 	ucd->cmd[5] = qfunc;                    /* 0x81 STD WRITE / 0x01 STD READ */
+ 	ucd->cmd[12] = opcode;
+ 	ucd->cmd[13] = idn;
+@@ -516,9 +523,8 @@
+ }
+ 
+ /*
+- * WRITE_ATTR/attribute query: the 4-byte value rides osf3 at cmd[19..22],
+- * big-endian (Linux: osf3 = cpu_to_be32(value << 16) for attributes; the
+- * shim's upiu_query_val, M2-proven bytes).
++ * WRITE_ATTR/attribute query: the 4-byte big-endian value occupies
++ * cmd[20..23] (UPIU header 12 bytes + query body offset 8).
+  */
+ static int
+ ufs_query_val(uint8_t opcode, uint8_t idn, uint8_t qfunc, uint32_t value)
+@@ -530,16 +536,16 @@
+ 	bzero(utrd, sizeof(*utrd));
+ 	bzero(ucd, sizeof(*ucd));
+ 	ucd->cmd[0] = 0x16;                     /* QUERY REQUEST */
+-	ucd->cmd[2] = 0xd0;                     /* the DEVICE W-LUN */
++	ucd->cmd[2] = 0x00;                     /* device management, no SCSI LUN */
+ 	ucd->cmd[3] = ++su.tag;
+-	ucd->cmd[4] = 0x02;                     /* command set type = QUERY */
++	ucd->cmd[4] = 0x00;                     /* reserved for query requests */
+ 	ucd->cmd[5] = qfunc;
+ 	ucd->cmd[12] = opcode;
+ 	ucd->cmd[13] = idn;
+-	ucd->cmd[19] = (uint8_t)(value >> 24);
+-	ucd->cmd[20] = (uint8_t)(value >> 16);
+-	ucd->cmd[21] = (uint8_t)(value >> 8);
+-	ucd->cmd[22] = (uint8_t)value;
++	ucd->cmd[20] = (uint8_t)(value >> 24);
++	ucd->cmd[21] = (uint8_t)(value >> 16);
++	ucd->cmd[22] = (uint8_t)(value >> 8);
++	ucd->cmd[23] = (uint8_t)value;
+ 
+ 	utrd->dw0 = (1u << 28) | (1u << 24);    /* UFS storage, no data */
+ 	utrd->dw2 = 0x0f;
+@@ -605,7 +611,7 @@
+ 		if (error) {
+ 			return error;
+ 		}
+-		if (ucd->resp[16] == 0) {
++		if (ucd->resp[23] == 0) {
+ 			return 0;                       /* cleared: bring-up done */
+ 		}
+ 		delay(50);
+@@ -617,16 +623,11 @@
+ static int
+ ufs_take_over_host(void)
+ {
+-	/* Flash #13 closed the reset question with data: an HCE reset FROM
+-	 * THE KERNEL wedges the UIC command layer - both the boot's second
+-	 * reset (flash #6) and its FIRST (flash #13: the first POWERON after
+-	 * the reset completed with PA err 0x80000001, then every later UIC
+-	 * command starved, ready bit dead). The ABL's handoff state, by
+-	 * contrast, completes every query and SCSI command (flashes #7-#12:
+-	 * attribute writes answered, TUR returned real sense). So: do NOT
+-	 * reset a ready host - take the link over as it is. The wake stays
+-	 * as the fallback for a genuinely dead ABL handoff (hce clear or
+-	 * DP/UTRLRDY missing), with the IS-acknowledged UIC sequence. */
++	/* Disable automatic hibernate while this polled driver owns the host.
++	 * AHIT=0 prevents an inherited idle timer racing software UIC commands. */
++	ufs_wr(REG_IE, 0);
++	ufs_wr(REG_AHIT, 0);
++	(void)ufs_rd(REG_AHIT);
+ 	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
+ 	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
+ 		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x), waking\n", hce, hcs);
+@@ -926,7 +927,7 @@
+ ufs_report_luns(uint32_t *luns_out)
+ {
+ 	uint8_t *b = (uint8_t *)(su.dma + DMA_BOUNCE);
+-	uint8_t cdb[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0 };
++	uint8_t cdb[12] = { 0xa0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0 };
+ 	int error = ufs_scsi(cdb, sizeof(cdb), 16, false);
+ 	if (error) {
+ 		return error;
+@@ -941,7 +942,7 @@
+ static void
+ ufs_dump_attrs(void)
+ {
+-	for (uint8_t idn = 0x00; idn <= 0x01; idn++) {
++	for (uint8_t idn = 0x00; idn <= 0x02; idn += 2) {
+ 		uint32_t rc = ufs_query(0x03, idn, 0x01);   /* READ_ATTR */
+ 		if (rc) {
+ 			printf("SWEET UFS: attr idn 0x%02x rc %d\n", idn, rc);
+@@ -949,21 +950,22 @@
+ 		}
+ 		struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
+ 		printf("SWEET UFS: attr idn 0x%02x = 0x%x\n", idn,
+-		    (ucd->resp[19] << 8) | ucd->resp[20]);
++		    (uint32_t)ucd->resp[20] << 24 | (uint32_t)ucd->resp[21] << 16 |
++		    (uint32_t)ucd->resp[22] << 8 | ucd->resp[23]);
+ 	}
+ }
+ 
+ /* Controller-state dump for the failure path: HCS, IS, the UIC command
+- * register, its ARG2, and the UIC error-code registers (0x44 UECDL data
+- * link, 0x48 UECPA PHY adapter) - to tell 'command never executed' from
++ * register, its ARG2, and the UIC error-code registers (0x3c UECDL data
++ * link, 0x38 UECPA PHY adapter) - to tell 'command never executed' from
+  * 'completed with error' from 'link negotiation failed'. */
+ static void
+ ufs_dump_ctl(const char *why)
+ {
+ 	printf("SWEET UFS: ctl %s: hce 0x%x hcs 0x%x is 0x%x ucmd 0x%x arg2 0x%x "
+-	    "uecdl 0x%x uecpa 0x%x\n", why,
++	    "uecdl 0x%x uecpa 0x%x uecdme 0x%x ahit 0x%x\n", why,
+ 	    ufs_rd(REG_HCE), ufs_rd(REG_HCS), ufs_rd(REG_IS), ufs_rd(REG_UIC_CMD),
+-	    ufs_rd(0x98), ufs_rd(0x44), ufs_rd(0x48));
++	    ufs_rd(REG_UIC_ARG2), ufs_rd(0x3c), ufs_rd(0x38), ufs_rd(0x48), ufs_rd(REG_AHIT));
+ }
+ 
+ static int
+@@ -1006,6 +1008,11 @@
+ 
+ 	lck_mtx_lock(&sweet_ufs_lock);
+ 	error = ufs_take_over_host();
++	if (error) {
++		ufs_dump_ctl("takeover failed");
++		lck_mtx_unlock(&sweet_ufs_lock);
++		return error;
++	}
+ 	if (!error) {
+ 		static const uint8_t tur[6] = { 0x00 };
+ 		/* The first command after the bootloader may report a unit attention. */
+@@ -1033,9 +1040,9 @@
+ 		ufs_dump_attrs();
+ 		printf("SWEET UFS: nop out rc %d\n", ufs_nop_out());
+ 		uint32_t luns = 0;
+-		printf("SWEET UFS: report luns rc %d luns %u\n",
+-		    ufs_report_luns(&luns), luns);
+-		static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x11, 0 };
++		int lunerr = ufs_report_luns(&luns);
++		printf("SWEET UFS: report luns rc %d luns %u\n", lunerr, luns);
++		static const uint8_t ssu[6] = { 0x1b, 0, 0, 0, 0x10, 0 };
+ 		int ssuerr = ufs_scsi(ssu, sizeof(ssu), 0, false);
+ 		printf("SWEET UFS: SSU ACTIVE rc %d\n", ssuerr);
+ 		if (!ssuerr) {
