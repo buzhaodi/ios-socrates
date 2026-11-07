@@ -36,7 +36,7 @@ We port *forward* inside the modern SM8250 lineage, while beryllium went *backwa
 | 5 | Touch | Goodix SPI driver (new vendor — the one real new-driver job) | taps work |
 | 6 | Buttons, backlight, CPU freq | PM8550-family GPIO keys + WLED; EPSS domains | buttons/backlight/clocks work |
 | 7 | GPU | Adreno 740: a740 GMU firmware, zap shader; Mesa freedreno a7xx | GPU-drawn UI |
-| 8 | Wi-Fi / BT | WCN785x: ath11k (same driver family as apollo's QCA6390) | scan, WPA2, internet |
+| 8 | Wi-Fi / BT | identify K60 radio; sheng ath12k candidate for WCN7850 | scan, WPA2, internet |
 | 9 | Audio / haptics | WCD9385-class codec + amps; haptic motor | sound, vibration |
 
 ## Device fact bank (mined from the socrates vendor DTB — `dtb_00..07`, Kalama QCM block — plus the mik60proios UniXNU campaign, all hardware-proven on this phone)
@@ -807,15 +807,17 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5. Image shim/out-mac/xnu-boot.img
   SHA2568ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a.
   Packed shim/DTB/payload byte matches and new board-skip string verified;
-  read-only boot arguments preserved. Temporary hardware boot next.
+  read-only boot arguments preserved.
+- Hardware17 OBSERVED: adb reboot bootloader from user-confirmed unlocked
+  Android; Sending21388KB OKAY0.493s, Booting OKAY0.102s, total0.600s.
+  No flash/erase. Panel/mount result UNKNOWN pending user photo.
 - Remaining CPU metadata issue for the next CPU/SMP milestone: mkadt.py still
   advertises old4+3+1 nominal clock assignments. Fix to the live3+4+1 and exact
   max frequencies before enabling SMP/governor. Flash17 keeps its identical
   prior ADT/cpus=1 to isolate the root-probe fix.
 
 ### Next concrete actions
-1. Flash17 CI/image complete; temporarily boot with the current corrected shim;
-   temporarily boot from the user's now-clean Android state. Observe userdata,
+1. Flash17 temporarily booted; user to capture panel. Observe userdata,
    peripheral-skip message, then filesystem mount failure expected on Android.
 2. M0 recovery backups before any root installation; then Linux/WSL iOS root
    build. Writing userdata requires explicit destructive-step confirmation.

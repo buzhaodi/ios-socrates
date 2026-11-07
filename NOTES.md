@@ -30,7 +30,10 @@
   device mapper. This is not an iOS HFS root yet.
 - Flash17 verified image8ba7285a..., kernel21b7798c...,
   UUID13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5 (shim/out-mac/xnu-boot.img).
-- NEXT: temporarily boot flash17 on the attached, unlocked Android device. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
+- Hardware17 OBSERVED: from user-confirmed unlocked Android, adb reboot
+  bootloader then fastboot boot; Sending21388KB OKAY0.493s, Booting OKAY
+  0.102s, total0.600s. No flash/erase. Panel outcome still pending.
+- NEXT: user photo of userdata/root-ready/skip line and the mount result. Expected: userdata + 'socrates root ready; unported SM8250 peripherals
   skipped', then root filesystem mount failure (Android userdata still there).
 - Sheng reference reviewed at user request: upstream689400177f93,
   CpuFreqProbe.cpp. Domains and L3 match SM8550; contains16ms governor,
