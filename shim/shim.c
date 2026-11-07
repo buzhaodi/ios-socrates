@@ -397,19 +397,20 @@ void shim_main(uint64_t dtb)
 	con_clear(RED);
 	con_str("SHIM", "sweet milestone 4: xnu loader");
 	con_skip();
-	/* M4 Plan B (2026-11-07, flash #6 instrumentation): DO NOT wake the UFS
-	 * here. The kernel's own ufs_wake_host runs the M2 recipe at probe time;
-	 * a wake HERE makes the kernel's HCE reset the SECOND of the boot, and on
-	 * SM8550 the UIC layer never re-arms its ready bit after a second HCE
-	 * cycle (uic 0x16 and 0x10 both starved, st 0x0 err 0x0 - flash #6).
-	 * Leaving the ABL's raw handoff state for the kernel makes its wake the
-	 * FIRST HCE cycle - the state where the M2 recipe is proven green. */
-#ifdef NUFS_WAKE
+	/* M4 flash #15 (2026-11-08): the wake is back IN the shim. Flash #14's
+	 * systematic dump proved the ABL handoff is the M2 v17 wall (bBootLUNEn=0,
+	 * attr writes 255, SSU 05/24, TUR 04/02 - exactly what M2 could only
+	 * cure with the FULL wake recipe), and a kernel-side HCE reset wedges the
+	 * UIC layer (flashes #6/#13) - so this is the only place the recipe can
+	 * run. The kernel no longer re-wakes (no HCE reset anywhere in it); its
+	 * fallback handles the HIBERNATED link the wake leaves after ~2.5 s of
+	 * kernel-bootstrap silence: DME_HIBERNATE_EXIT + DME_LINK_STARTUP before
+	 * any TUR (the flashes #2-#6 'hcs 0x8 at kernel time' = link in
+	 * hibernate, DP dropped - the ufshcd hibernate-exit lore). */
 	stage = "ufs wake";
 	uint32_t ufs_rc = ufs_wake_for_kernel();
 	con_hex2("UFS WAKE", "final rc=", ufs_rc, "db=", 0);
 	con_skip();
-#endif
 	stage = "loader";
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);

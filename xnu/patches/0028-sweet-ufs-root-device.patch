@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,818 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -360,50 +360,24 @@ new file mode 100644
 +static int
 +ufs_wake_host(void)
 +{
-+	uint32_t mem_cfg = ufs_rd(REG_MEM_CFG);
-+	if (mem_cfg & 1) {
-+		/* MCQ mode synthesizes UPIU responses at the legacy doorbell. */
-+		ufs_wr(REG_MEM_CFG, mem_cfg & ~1u);
-+	}
-+	ufs_wr(REG_UTRLRSR, 0);
-+	ufs_wr(REG_HCE, 0);
-+	delay(100);
-+	ufs_wr(REG_HCE, 1);
-+	/* DP does NOT rise by itself on a warm reset: flash #3 (2026-11-07) saw the
-+	 * HCE reset leave hcs with UCRDY/UTRLRDY but no DP through the whole 1 s
-+	 * poll. On this second wake of the boot (the shim already ran the full
-+	 * recipe and left the device mid-session), DP only returns once the
-+	 * UniPro link is re-established - i.e. AFTER DME_POWERON +
-+	 * DME_LINK_STARTUP. Gate on UCRDY (the controller taking UIC commands),
-+	 * run the UIC pair, then check DP. */
-+	/* UCRDY (hcs bit 3): the controller is taking UIC commands. */
-+	for (int i = 0; i < 100 && !(ufs_rd(REG_HCS) & (1u << 3)); i++) {
-+		delay(1);
-+	}
-+	if (!(ufs_rd(REG_HCS) & (1u << 3))) {
-+		printf("SWEET UFS: wake: controller not up (hce 0x%x hcs 0x%x)\n",
-+		    ufs_rd(REG_HCE), ufs_rd(REG_HCS));
-+		return ENXIO;
-+	}
-+	/* Flash #13 proved the ABL handoff device is ALREADY POWERED: the first
-+	 * DME_POWERON completed with PA err 0x80000001 ('already powered'),
-+	 * and its unacknowledged IS completion flags starved every following
-+	 * UIC command (the ready bit died) - both fixed here: IS ack'd around
-+	 * every command, and LINK_STARTUP first (the warm path). POWERON is
-+	 * only the fallback when startup says the device is down. */
-+	int error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
++	/* Flash #15 (2026-11-08): NO HCE reset - a kernel-side reset wedges the
++	 * UIC command layer (flashes #6 and #13, both first and second cycle).
++	 * The only wake state the kernel can meet: the shim's fully-woken link
++	 * that HIBERNATED during the ~2.5 s of kernel bootstrap (the flashes
++	 * #2-#6 'hcs 0x8 at kernel time': DP drops in hibernate). The cure is
++	 * ufshcd's routine: DME_HIBERNATE_EXIT, then DME_LINK_STARTUP. The
++	 * POWERON fallback stays for a genuinely powered-down device. */
++	int error = ufs_uic_cmd(0x11);           /* DME_HIBERNATE_EXIT */
++	printf("SWEET UFS: wake: hib8 exit rc %d\n", error);
++	error = ufs_uic_cmd(0x16);               /* DME_LINK_STARTUP */
 +	printf("SWEET UFS: wake: link startup rc %d\n", error);
 +	if (error) {
 +		printf("SWEET UFS: wake: link startup refused (is 0x%x err 0x%x)\n",
 +		    ufs_rd(REG_IS), ufs_rd(0x48));
-+		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON, the cold fallback */
++		/* the cold fallback: the device may be powered down */
++		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON */
 +			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
 +		}
-+	}
-+	if (error) {
-+		printf("SWEET UFS: wake: UIC 0x%x (is 0x%x err 0x%x)\n",
-+		    ufs_rd(REG_UIC_CMD), ufs_rd(REG_IS), ufs_rd(0x48));
-+		return error;
 +	}
 +	for (int i = 0; i < 1000 && !(ufs_rd(REG_HCS) & HCS_DP); i++) {
 +		delay(1);
@@ -416,6 +390,7 @@ new file mode 100644
 +	printf("SWEET UFS: wake: link re-established (hcs 0x%x)\n", ufs_rd(REG_HCS));
 +	return 0;
 +}
++
 +
 +/*
 + * One QUERY UPIU through the same UTRD slot (the v5-v19 shim lessons: command
