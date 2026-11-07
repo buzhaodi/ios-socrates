@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,737 @@
+@@ -0,0 +1,750 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -324,7 +324,15 @@ new file mode 100644
 +	for (int i = 0; i < 1000 && (ufs_rd(REG_UIC_STATUS) & 1) == 0; i++) {
 +		delay(1);
 +	}
-+	return (ufs_rd(REG_UIC_STATUS) & 1) ? 0 : ETIMEDOUT;
++	if ((ufs_rd(REG_UIC_STATUS) & 1) == 0) {
++		/* Flash #5: on the boot's second wake the UIC layer can refuse
++		 * outright (is 0x404, err 0) - the ready bit never returns. Say
++		 * WHICH command starved and what the registers held. */
++		printf("SWEET UFS: uic 0x%x starved (st 0x%x is 0x%x err 0x%x)\n",
++		    cmd, ufs_rd(REG_UIC_STATUS), ufs_rd(REG_IS), ufs_rd(0x48));
++		return ETIMEDOUT;
++	}
++	return 0;
 +}
 +
 +/*
@@ -368,9 +376,14 @@ new file mode 100644
 +	 * DME_POWERON to a live device is rejected (is 0x404, err 0x80000001 -
 +	 * the physical-adapter error ufshcd avoids by never sending POWERON to
 +	 * a live device). If startup fails, the device may be down (the ABL's
-+	 * handoff state / the M2 first-wake scenario): POWERON, then retry. */
++	 * handoff state / the M2 first-wake scenario): POWERON, then retry.
++	 * Flash #5: BOTH were refused (the printed 0x10 = the fallback, its
++	 * err 0 = the ready bit never rose -> ufs_uic_cmd's starved print says
++	 * which of the two starved and the register state). */
 +	int error = ufs_uic_cmd(0x16);           /* DME_LINK_STARTUP */
 +	if (error) {
++		printf("SWEET UFS: wake: link startup refused (is 0x%x err 0x%x)\n",
++		    ufs_rd(REG_IS), ufs_rd(0x48));
 +		if (ufs_uic_cmd(0x10) == 0) {     /* DME_POWERON, the cold fallback */
 +			error = ufs_uic_cmd(0x16); /* DME_LINK_STARTUP, second try */
 +		}
