@@ -480,9 +480,29 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   GPT -> 'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' ->
   'BSD root: ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
 
+### 2026-11-07 — flash #8 verdict: SET fDeviceInit rejected 0xFF (the already-done op — no
+### HCE reset this boot, the ABL ran the bring-up); dev_init now reads the flag; flash #9
+### image 9f92186f…
+
+- Flash #8 (b6a8cf19): 0187 fired exactly as designed — TUR x3 CHECK CONDITION, then
+  'SWEET UFS: set fDeviceInit error 255': SET_FLAG bDeviceInit returned GENERIC_FAILURE
+  (0xFF). Root cause: with no HCE reset this boot (Plan B), the ABL already ran the
+  device's bring-up during its own boot — the flag is ALREADY clear, and setting the
+  already-done operation is rejected. The kernel aborted at the SET; the shim's v19
+  logic reads the flag after ANY SET outcome — flag 0 = bring-up done, TUR proceeds.
+- Fix (507d5d7): ufs_dev_init falls through to the READ poll on a SET failure
+  ('set fDeviceInit error 255, reading the flag'). CI 42324294218 green (kernel
+  8fc51080…). 187 patches validate + strict-chain green.
+- Flash #9 image shim/out-mac/xnu-boot.img sha 9f92186fafdac335e8774ca43f16b676016f3ca4
+  69 64af39078fc1e3385d9a4f (Plan B shim + 0187 + dev-init fallthrough + rd=ufsroot0 +
+  kryo470 x8, verified inside).
+- Flash #9 expected: TUR fail x3 -> 'set fDeviceInit error 255, reading the flag' ->
+  (flag clear) -> TUR GREEN -> GPT -> 'SWEET UFS: "userdata" on LUN 0: first block
+  0x…, N MiB, read-only' -> 'BSD root: ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
+
 ### Next concrete actions
-1. (user) M4 probe flash #8, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha b6a8cf19…): same drill. Success = the userdata partition line + mountroot panic.
+1. (user) M4 probe flash #9, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 9f92186f…): same drill. Success = the userdata partition line + mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.

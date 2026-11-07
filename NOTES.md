@@ -2,19 +2,18 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 10:30): flash #7 BREAKTHROUGH — ABL link ALIVE (Plan B right); TUR CHECK CONDITION = needs fDeviceInit; 0187 built (kernel 30792767, CI 42322510617 green); flash #8 image b6a8cf19… ready <<<
+### >>> SOCRATES (2026-11-07 11:20): flash #8 — SET fDeviceInit rejected 0xFF (already-done op; the ABL ran bring-up, no HCE reset this boot); dev_init now reads the flag (kernel 8fc51080, CI 42324294218 green); flash #9 image 9f92186f… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- Flash #7: no wake lines (ABL handoff passes the ready gate directly - the shim's
-  pre-XNU wake was the poison of flashes #2-#6), list takeover OK, TUR x3 CHECK
-  CONDITION (response 0x1 status 0x2) = the M2 needs-init disease. Cure: patch 0187
-  (rides after the series; 0028's context is owned by 0030/0034): on TUR failure run
-  ufs_dev_init() then retry. 187 patches validate + strict-chain green.
-- Flash #8 image shim/out-mac/xnu-boot.img sha b6a8cf19b13e5a842666d3894acc4ea3334c30
-  1a83f32b19e72885c8ea22d588 (Plan B shim + 0187 kernel + rd=ufsroot0 + kryo470 x8).
-- NEXT: (user) flash #8. Success = 'userdata on LUN 0' + mountroot panic = M4 probe
-  done. Then M0 backups, then the iOS root build into userdata (destructive; explicit
+- Failure-point trajectory (all photo-decoded): #3 HCE/DP order -> #4 POWERON-rejected ->
+  #5 both UIC refused -> #6 both STARVED (UIC wedged by the 2nd HCE) -> #7 ABL link ALIVE,
+  TUR CHECK CONDITION (needs-init) -> #8 SET fDeviceInit 0xFF (already-done op) -> #9 the
+  flag read after the failed SET (the shim v19 logic, kernel-side).
+- Flash #9 image shim/out-mac/xnu-boot.img sha 9f92186fafdac335e8774ca43f16b676016f3ca4
+  69 64af39078fc1e3385d9a4f (verified inside).
+- NEXT: (user) flash #9. Success = 'userdata on LUN 0' + mountroot panic = M4 probe done.
+  Then M0 backups, then the iOS root build into userdata (destructive; explicit
   confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
