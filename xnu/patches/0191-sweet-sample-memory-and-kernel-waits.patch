@@ -1,0 +1,68 @@
+From: socrates bring-up
+Subject: [PATCH] sweet: show memory and kernel wait context in process samples
+
+Boot19 now samples SpringBoard in dyld MachOFile::forEachLoadCommand,
+at a load instruction, repeatedly. A saved user PC alone cannot separate
+slow progress from a fault/memory wait or scheduler suspension. Print
+approximate VM page counters and thread state/wait/continuation values.
+Do not dereference diagnostic pointers or change memory/scheduler policy.
+
+--- a/bsd/dev/sweet_sample.c
++++ b/bsd/dev/sweet_sample.c
+@@ -24,6 +24,7 @@
+ extern task_t proc_task(proc_t);
+ extern int hz;
+ extern void sweet_sample_start(void);
++extern void sweet_sample_memory(void);
+ 
+ static char sweet_sample_names[128];
+ 
+@@ -86,6 +87,7 @@
+ 	for (int i = 0; i < 40; i++) {
+ 		unsigned int matched = 0;
+ 		printf("SMP --- sample %d\n", i);
++		sweet_sample_memory();
+ 		proc_iterate(PROC_ALLPROCLIST, sweet_sample_proc, &matched, NULL, NULL);
+ 		printf("SMP --- matched %u processes\n", matched);
+ 		(void)tsleep(&chan, PZERO, "sweetsmp", interval * hz);
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -821,6 +821,7 @@
+ }
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <vm/vm_page.h>
+ #include <vm/vm_shared_region.h>
+ #include <arm/thread.h>
+ 
+@@ -994,6 +995,18 @@
+  * SWEET process sampler (bsd/dev/sweet_sample.c): user pc/lr/sp and a frame
+  * pointer backtrace of every thread of a task, from the saved user state.
+  */
++void sweet_sample_memory(void);
++
++void
++sweet_sample_memory(void)
++{
++	/* Approximate counters; observation only, no VM locks or allocation. */
++	printf("SMP memory pages free %u active %u inactive %u wired %u wanted %u privileged %u pagebytes %u\n",
++	    vm_page_free_count, vm_page_active_count, vm_page_inactive_count,
++	    vm_page_wire_count, vm_page_free_wanted, vm_page_free_wanted_privileged,
++	    (unsigned int)PAGE_SIZE);
++}
++
+ void sweet_sample_task(const char *name, int pid, task_t task);
+ 
+ void
+@@ -1021,6 +1034,11 @@
+ 		if (ss == NULL || !is_saved_state64(ss)) {
+ 			continue;
+ 		}
++		/* Best-effort scheduler snapshot, not an atomic thread state dump.
++		 * Only print values; never dereference wait_event or continuation. */
++		printf("SMP %s t%d ks state 0x%x wait 0x%llx cont 0x%llx pri %d\n",
++		    name, tn, thread->state, (unsigned long long)thread->wait_event,
++		    (unsigned long long)(uintptr_t)thread->continuation, thread->sched_pri);
+ 		fp = get_saved_state_fp(ss);
+ 		n = snprintf(line, sizeof(line), "SMP %s t%d pc 0x%llx lr 0x%llx sp 0x%llx bt", name, tn++,
+ 		    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss));

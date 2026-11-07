@@ -103,8 +103,26 @@
   It advances to data-protection / exec seputil afterward, so none of these
   lines proves a fatal mount failure. Do not treat samples0/1 as the settled
   post-earlyboot endpoint: boot18 already completed early boot successfully.
-  NEXT: later SMP sample after current early boot, especially UI service names
-  and thread PCs; no speculative mount/root changes or new reboot yet.
+- Later boot19 photo OBSERVED sample7: SpringBoard[27] now exists, alongside
+  launchd[1] and xpcproxy[23..26,28] (matched7). No backboardd/configd in that
+  complete watched-set sample. Zero frames persists; no panic visible. The
+  same SpringBoard user PC/backtrace appears in neighboring visible samples.
+- Exact20H392 symbolication, slide0x1de48000: SpringBoard PC0x1c245c754 ->
+  unslid0x1a4614754 dyld MachOFile::forEachLoadCommand+228 (ldr w9,[x1,#4]).
+  Stack: forEachSection -> forEachDOFSection -> RuntimeState::notifyDtrace ->
+  dyld4::prepare -> start. It has not demonstrated normal SpringBoard main/UI.
+  Repeated saved PC can represent a page fault/wait, not necessarily a spin.
+  launchd t0 resolves malloc_zone_malloc/vasprintf, xpcproxy23 objc method
+  preparation. Do not infer GPU failure as the sole current blocker.
+- Read-only baseline-root cache/binaries exported locally for exact symbol
+  lookup (research/ios-root/symbols-20H392, ignored). ipsw3.1.743 official release
+  archive checksum verified, used locally; no Apple/device data uploaded.
+  Local analysis: research/ios-root/boot19-springboard-symbols.txt.
+- Patch0191 prepared: approximate VM page counters plus per-thread scheduler
+  state/wait-event/continuation/priority in SMP. No pointer dereferences or
+  policy changes. Current256MiB RAM is a hypothesis to measure, NOT a proven
+  cause or permission to guess larger memory ranges. Local2/2 AArch64 source
+  syntax compiles PASS. Full CI/build20 and hardware result still pending.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;

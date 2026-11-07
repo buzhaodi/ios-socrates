@@ -1046,9 +1046,28 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - No code/root modifications/new CI or boot from this panel analysis. Need
   later samples after early boot before claiming a stable UI-service blocker.
 
+### 2026-11-08 — boot19 SpringBoard exists, sampled in dyld startup
+
+- User photo sample7 matches7: SpringBoard27, launchd1, xpcproxy23/24/25/26/28.
+  No backboardd/configd in that complete sample. Zero frames; no shown panic.
+  SpringBoard PC/backtrace unchanged across neighboring visible snapshots.
+- Exact20H392 cache symbolication (official ipsw3.1.743 archive hash-verified):
+  slide0x1de48000; PC0x1c245c754 -> unslid0x1a4614754, dyld MachOFile::
+  forEachLoadCommand+228, `ldr w9,[x1,#4]`. Chain forEachSection ->
+  forEachDOFSection -> RuntimeState::notifyDtrace -> dyld4::prepare -> start.
+  This is loader startup, not normal UI work. A retained user PC cannot tell
+  running/spinning from a blocked fault. No speculative dyld patch warranted.
+- Local baseline root mounted READ-ONLY to export matching cache/binaries for
+  analysis. Exports/reports/tools remain under ignored research/, no phone write.
+- Patch0191 adds approximate VM counts and kernel scheduler wait context to
+  existing sampler. Local2/2 AArch64 compiles PASS. Initial local attempt used
+  a nonexported VM header from BSD; moved VM reporting into osfmk (final checks
+  pass). No change to memory layout, driver state or security checks.
+- Current256MiB memory may be a constraint; not proven to cause this stall.
+  Do not grow RAM without validating safe device memory map/carveouts.
+
 ### Next concrete actions
-1. Obtain later boot19 SMP sample, ideally after Early boot complete; inspect
-   whether backboardd/SpringBoard appear and their thread PCs.
-2. Diagnose actual stable endpoint. No speculative mount/entropy/security fixes
-   or repeat userdata flash based on these early warnings.
-3. Continue K60 drivers from banked sheng references; keep backups local.
+1. Validate/commit0191, full kernel CI, prepare temporary boot20 with same ADT.
+2. Get kernel wait + VM stats before fixing dyld/GPU or changing RAM.
+3. Preserve root/protected partitions and local-only backups. Boot19 may remain
+   running while building; ask user for FASTBOOT only when boot20 is ready.
