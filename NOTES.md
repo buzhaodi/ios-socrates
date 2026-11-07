@@ -2,7 +2,7 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata write awaiting explicit approval <<<
+### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata INSTALLED; boot18 HFS + launchd HARDWARE PASS; early boot progressing, UI pending <<<
 
 - Target is K60 Pro ONLY. User authorized local backups and explicitly forbids
   uploading them to Git. User does not need personal data retained; goal is
@@ -14,7 +14,8 @@
   reread after fsync PASS, all12 GPT header/entry-array CRC checks PASS.
   Manifest/SHA256SUMS/inventory/Android build metadata/restore notes stay LOCAL.
   Whole-LUN aliases were excluded. Source was running Android with Magisk root;
-  no phone partition writes. User has been notified backup is complete.
+  backup operation made no phone partition writes. User notified backup complete;
+  the subsequent explicit-approved userdata installation is recorded below.
 - Root inputs: local IPSW16.7.16/20H392 d22ap Erase identity, three APFS system
   volumes extracted/hashed under research/ipsw/iPhone10_3-20H392.
 - Ubuntu24.04.3 ARM64 in Parallels; prlctl exec guest root works. Read-only
@@ -39,15 +40,43 @@
   Same kernel08b23ef/CI42396141835 (SUCCESS), UUID13B38CEA-2E65-3B80-8BA1-
   E1DA7873C5D5; boot args add ignition_level=1, unentitled_ios_sim_launch=1,
   launchd_unsecure_cache=1, ufsrw=1/rootrw=1. Packed shim/DTB/payload verified.
-  This boot image is PREPARED ONLY; not booted, no userdata writes authorized.
+  User explicitly approved userdata write (reply: 好的 写入吧); boot18
+  accepted after installation (details below). Pre-write sparse/header/SHA, boot SHA, socrates identity,
+  userdata240597577728B and backup-file checks PASS; battery100%, powered.
 - Previous hardware milestone: flash17 probe8ba7285a... read userdata on LUN0,
   first0x2f7840,229451MiB,read-only, BSD ufsroot0B; HFS mount fails on Android
   data. Patch0188 fixed UFS protocol;0189 skips unported SM8250 peripherals.
-- NEXT: obtain explicit destructive-step confirmation for installing the
-  verified sparse root into EXISTING userdata (/dev/block/sda32,240597577728B).
-  Planned command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
-  Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups. Do NOT
-  flash until user confirms. Then temporarily boot18 and inspect root/launchd.
+- OBSERVED: user explicitly approved (好的 写入吧); bootloader product=socrates,
+  current-slot=b,is-userspace=no,userdata size0x3804BBB000 confirmed.
+  fastboot userdata flash COMPLETE, exit0,24/24 send+write OKAY,289.041s.
+  Full device readback has NOT been performed. Android userdata was overwritten;
+  GPT/bootloader/recovery/modem/persist were not flashed.
+- Boot18 attempt1: after software reboot bootloader, Mac USB pipe errors
+  e00002d6 and Sending stall. Stopped only host RAM boot transfer. User then
+  forced volume-down+power to fresh FASTBOOT. Retry accepted:21388KB Sending
+  OKAY0.493s, Booting OKAY0.103s,total0.601s. No repeat userdata write.
+- Boot18 user photos NOW OBSERVED, in sequence:
+  1. userdata read-write, HFS iOSRoot journal/hotfile-tree initialization;
+     initial pause was not proven permanent (HFBT print precedes final I/O).
+  2. PID1 launchd maps44 dyld subcaches; repeated 'not in trust cache'. Exact
+     vm_unix.c code falls back to root-owner check rather than rejecting here.
+  3. DONE EARLYBOOT SETUP / DONE UMD_INIT; launchd boot tasks and execs for
+     dirs_cleaner,xpcroleaccountd,init_featureflags,auearlyboot,tzinit, etc.
+     HFS root and real launchd execution are HARDWARE-PROVEN. No UI yet.
+- No speculative kernel patch was made for the initial pause/trust-cache log:
+  later photos proved progression. Initial root mount/early-boot delay can be
+  long; wait for the current boot to settle before interrupting initialization.
+  Warnings observed: dc_reset /tmp and /var/run EINVAL; timezone symlink paths
+  missing; PRNG seed files absent; CPU-wake Mach message error0x10000003.
+  These did not prevent the shown boot tasks; do not label them fatal blindly.
+- NEXT: user screen updates for backboardd/SpringBoard and a stable endpoint or
+  actual panic; if progress stops, diagnose that endpoint. Future useful step:
+  enable pure process sampling/logging separately from unported hardware init.
+  No further root-image write is currently needed or authorized.
+- Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
+  Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
+  Confirmation for this completed userdata installation is already recorded;
+  future separate destructive actions require their own confirmation.
 - K60 adaptation references banked in PORTING-SOCRATES.md: live3+4+1 CPU layout
   (0-2/3-6/7), max2016/2803.2/3187.2MHz; Adreno740v2; goodix_ts. Sheng EPSS /
   L3/A740/GMU/SMMU/GENI/HID/ath12k audit done. Exact radio ID unverified.

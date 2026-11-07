@@ -37,8 +37,8 @@ launchd or SpringBoard success.
 | 2 | Shim UFS read | Done | M2 verified TUR, six LUNs and GPT enumeration |
 | 3 | XNU bootstrap and fbcon | Done | QEMU and hardware verified kernel console, GIC/timer and live 60Hz framebuffer heartbeat; console geometry1440x1024 |
 | 4a | Kernel UFS/GPT/BSD root device | Done | Flash17 reads userdata on LUN0 (first0x2f7840,229451MiB,read-only), registers ufsroot0B and reaches filesystem mounting |
-| 4b | Build/install iOS HFS+ root | Built/verified; install pending | 16GiB HFS root and sparse image pass fsck, file/ownership/hardlink checks, sparse round-trip and host hashes; explicit userdata-write confirmation pending |
-| 4c | launchd/backboardd/SpringBoard | Pending | Requires the installed iOS root; done when SpringBoard draws on K60 Pro |
+| 4b | Build/install iOS HFS+ root | Installed; HFS hardware pass | Verified16GiB root written;24/24 fragments OKAY; boot18 HFS iOSRoot and launchd photos prove readable root; no full device readback hash |
+| 4c | launchd/backboardd/SpringBoard | launchd running; UI pending | Boot18 DONE EARLYBOOT SETUP / DONE UMD_INIT and launchd jobs confirmed; done when SpringBoard draws on K60 Pro |
 | 5 | Goodix touch | Hardware identified; port pending | Android identifies goodix_ts; verify exact Goodix protocol/firmware/IRQ/pins, then taps work |
 | 6 | Buttons/backlight/CPU frequency | Port pending | EPSS reference reviewed and live3+4+1 topology verified; unported SM8250 initializers skipped; done when K60 controls and clock policy work |
 | 7 | GPU acceleration | Hardware identified; port pending | Adreno740v2 confirmed; sheng A740/GMU/SMMU/Metal references reviewed; done when GPU renders K60 UI |
@@ -48,7 +48,7 @@ launchd or SpringBoard success.
 Flash17 build: commit08b23ef, CI[42396141835](https://github.com/buzhaodi/ios-socrates/actions/runs/42396141835)
 SUCCESS; image SHA2568ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a.
 The present HFS signature/mount errors are expected on Android's existing data;
-no iOS root was written and M4b/M4c are not complete.
+that was the flash17 endpoint. M4b installation has since completed with user approval; M4c still needs hardware confirmation.
 
 ## Device fact bank (mined from the socrates vendor DTB — `dtb_00..07`, Kalama QCM block — plus the mik60proios UniXNU campaign, all hardware-proven on this phone)
 
@@ -932,11 +932,61 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Explicit destructive-step user confirmation still required before this.
 
+### 2026-11-08 — user-approved userdata installation COMPLETE; root boot18 ACCEPTED
+
+- User explicitly authorized the reviewed destructive action: 好的 写入吧.
+  Rechecked sparse-image SHA256/header/expanded size, boot-image SHA256,
+  backup-file presence/verification report and live socrates identity.
+  Battery100%,powered. Bootloader reports product=socrates,current-slot=b,
+  is-userspace=no,userdata0x3804BBB000=240597577728B, matching the approved plan.
+- Executed ONLY the approved flash:
+  fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
+  Exit0;24/24 Sending and24/24 Writing OKAY; total289.041s. Android userdata
+  overwritten with the16GiB iOS HFS root. No GPT/bootloader/recovery/modem/
+  persist flash commands. Backup artifacts remain local/ignored.
+  Host image validation and fastboot acknowledgments are proven; full device
+  readback SHA256 has NOT been performed. HFS mount remains to be observed.
+- Boot18 attempt1 after fastboot reboot bootloader: USB clear input/output pipe
+  errors e00002d6, then Sending stalled. Terminated only the host RAM-transfer
+  process, not a partition flash. User forced volume-down+power to fresh
+  FASTBOOT. Retry SAME boot image, no repeat userdata write: Sending21388KB
+  OKAY0.493s,Booting OKAY0.103s,total0.601s,exit0.
+- Boot image: shim/out-mac/xnu-ios-root-boot.img SHA256
+  24f5852b6d42014ff19e39b692ec14da3a791d2c9433838691ea333ba178beb5,
+  kernel08b23ef/CI42396141835 unchanged. Panel HFS/launchd/UI result UNKNOWN.
+- Local logs/results: research/ios-root/flash18-userdata.log,
+  boot18-fastboot.log (stalled attempt),boot18-fastboot-retry1.log,
+  installation-result.json and image-manifest.json. Device dumps/backups and
+  Apple artifacts remain out of Git. README and active handoff reflect install.
+- Future tests must account for installed HFS userdata: ordinary Android boot
+  is no longer the pre-install clean-state path. Do not format userdata or
+  restore Android without a separately authorized destructive action.
+
+### 2026-11-08 — boot18 HFS root and real launchd HARDWARE SUCCESS
+
+- User sent three sequential panel updates. First: userdata read-write and
+  HFS iOSRoot journal/hotfile-tree creation, then a pause. Second: PID1
+  launchd maps dyld subcaches and framebuffer heartbeat continues. Third:
+  DONE EARLYBOOT SETUP, DONE UMD_INIT, launchd logging initialized pid1 and
+  real exec/boot tasks (dirs_cleaner,xpcroleaccountd,init_featureflags,
+  auearlyboot,tzinit,FinishRestoreFromBackup,Finish_demo_restore,sysstatuscheck).
+- This proves HFS root access and actual launchd execution; initial pause was
+  not a permanent mount stall. No new diagnostic kernel was needed or made.
+  vm_unix.c trust-cache message jumps to root_check (UID0 fallback), not an
+  immediate error; subsequent launchd boot jobs prove it did not block this boot.
+- Nonfatal-so-far warnings visible: dc_reset EINVAL for /tmp and /var/run,
+  timezone symlink paths absent, PRNG seed files absent, CPU-wake message
+  error0x10000003. Later tasks continue; diagnose only a demonstrated blocker.
+- iOS UI/backboardd/SpringBoard rendering not yet verified. Current boot is
+  still progressing; avoid interrupting first-boot initialization prematurely.
+- Exact CI17 buildtree downloaded locally for source diagnosis (xnu/out-buildtree17,
+  ignored). Earlier /tmp/xnu-applycheck was not the full current patched source;
+  use the exact artifact/series when adding a future patch.
+
 ### Next concrete actions
-1. Ask explicit confirmation to overwrite userdata with the verified sparse
-   root (personal Android data is not backed up). Do not change GPT or flash
-   bootloader/recovery/modem/persist; keep backups local and intact.
-2. Only after confirmation: reboot into bootloader, verify target size, flash
-   userdata, then temporarily boot18 and capture HFS mount/launchd results.
-3. Continue K60-only CPU/touch/GPU/Wi-Fi adaptations from sheng references;
-   root-image validation does not prove userland or graphics work on hardware.
+1. Observe current first-boot progress until a stable endpoint/panic or iOS UI;
+   user screen is the evidence channel. Capture backboardd/SpringBoard lines.
+2. If an actual stop appears, add focused outcome/process diagnostics; the
+   socrates peripheral gate currently also skips the optional sampler/logger.
+3. Continue K60 CPU/touch/GPU/Wi-Fi adaptation from sheng references. Keep
+   backups local and preserve installed root; no repeat root flash needed now.

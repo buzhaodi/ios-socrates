@@ -1,13 +1,13 @@
 # ios-socrates
 
-A native **iOS 16.7.16 (20H392) port for the Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550). The goal is to boot the iPhone X system on a patched XNU kernel, without Android underneath. **Current hardware progress: XNU boots, reads the internal UFS/GPT and registers `userdata` as its root device. The iOS root filesystem, launchd and SpringBoard have not booted yet.**
+A native **iOS 16.7.16 (20H392) port for the Redmi K60 Pro** (`socrates`, Snapdragon 8 Gen 2 / SM8550). The goal is to boot the iPhone X system on a patched XNU kernel, without Android underneath. **Current hardware progress: XNU boots, reads the internal UFS/GPT and registers `userdata` as its root device. The iOS root is installed in userdata: hardware photos confirm HFS mounting and PID 1 launchd executing early boot tasks. SpringBoard and a working iOS interface are not yet verified.**
 
 This repository targets **K60 Pro only**. It inherits the [ios-apollo](https://github.com/aTechGeekDev/ios-apollo) foundation and uses [ios-beryllium](https://github.com/LakoMoor/ios-beryllium) and [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) as porting references. A donor implementation is not evidence that its driver works on this phone.
 
 **Active branch:** `socrates` in [buzhaodi/ios-socrates](https://github.com/buzhaodi/ios-socrates).
 
 > [!WARNING]
-> This is an experiment, not a daily-use phone OS. Most of Apple's security model is switched off, and installing the iOS root **erases Android's `userdata` partition**. Every test boot on the phone is a temporary `fastboot boot` — nothing is flashed.
+> This is an experiment, not a daily-use phone OS. Most of Apple's security model is switched off, and installing the iOS root **erases Android's `userdata` partition**. Kernel test images use temporary `fastboot boot`. The iOS root was written only to `userdata` after explicit user confirmation; bootloaders, recovery, modem, persist and GPT were not flashed.
 
 ---
 
@@ -21,7 +21,7 @@ SWEET UFS: socrates root ready; unported SM8250 peripherals skipped
 BSD root: ufsroot0B, major 1, minor 0
 ```
 
-HFS then rejects the existing partition content (`unknown Volume Signature: 152e`, mount error 22 / root errno 19) and retries the mount. This is the expected endpoint of the current read-only probe: Android data remains in `userdata`; an iOS HFS+ root has not been installed. Flash #16's data abort in the inherited SM8250 CPU-frequency driver is avoided by patch 0189, which skips unported peripheral initialization after registering the K60 Pro root device. **CPU frequency control is not yet adapted or enabled.**
+HFS then rejects the existing partition content (`unknown Volume Signature: 152e`, mount error 22 / root errno 19) and retries the mount. This is the expected endpoint of the current read-only probe: at the time of flash #17, Android data was still in `userdata`. Since then the user approved installation and the verified iOS HFS+ root was written there. Flash #16's data abort in the inherited SM8250 CPU-frequency driver is avoided by patch 0189, which skips unported peripheral initialization after registering the K60 Pro root device. **CPU frequency control is not yet adapted or enabled.**
 
 | # | Milestone | Status | Hardware evidence / remaining work |
 | --- | --- | --- | --- |
@@ -30,8 +30,8 @@ HFS then rejects the existing partition content (`unknown Volume Signature: 152e
 | 2 | Shim UFS read | Done | TUR, six LUNs and GPT enumeration verified during the M2 campaign |
 | 3 | XNU bootstrap and console | Done | Kernel runs on SM8550 with GIC/timer interrupts and a live 60 Hz framebuffer heartbeat; console currently uses 1440×1024 |
 | 4a | Kernel UFS / GPT / BSD root device | Done | Flash #17 reads `userdata` on LUN 0, registers `ufsroot0B`, and reaches filesystem mount attempts |
-| 4b | Build and install iOS root | Image built and verified; installation pending | 16 GiB HFS+ root and ~11.31 GiB sparse file ready locally; HFS check, key files, sparse round-trip and exported hashes pass. Userdata write awaits explicit confirmation |
-| 4c | launchd → backboardd → SpringBoard | Pending | Requires a valid installed iOS root; no iOS user interface has run on K60 Pro yet |
+| 4b | Build and install iOS root | Installed; HFS hardware pass | Verified 16 GiB root; 24 sparse fragments written successfully; boot #18 recognizes iOSRoot and reaches real launchd. Full device readback hash not performed |
+| 4c | launchd → backboardd → SpringBoard | launchd running; UI pending | Boot #18 shows DONE EARLYBOOT SETUP / DONE UMD_INIT and real launchd boot jobs; backboardd/SpringBoard rendering not yet verified |
 | 5 | Goodix touch | Hardware identified; port pending | Live Android reports `goodix_ts`; sheng uses Novatek, so its controller protocol cannot be copied directly |
 | 6 | Buttons, backlight, CPU frequency | Port pending | Live CPU topology is **3+4+1** (CPUs 0–2 / 3–6 / 7); sheng EPSS/L3 implementation reviewed; old SM8250 drivers remain skipped |
 | 7 | GPU acceleration | Hardware identified; port pending | Live GPU is **Adreno 740v2**; sheng A740, GMU/SMMU and Metal/Turnip components reviewed; no accelerated rendering verified on K60 Pro |
@@ -40,7 +40,7 @@ HFS then rejects the existing partition content (`unknown Volume Signature: 152e
 
 Latest verified build: [GitHub Actions 42396141835](https://github.com/buzhaodi/ios-socrates/actions/runs/42396141835), kernel source commit `08b23ef`, patches **0001–0189**. Local validation passes, including 20 executable UFS/board-selection regression cases.
 
-- Temporary boot image: `shim/out-mac/xnu-boot.img`
+- Verified read-only storage probe #17: `shim/out-mac/xnu-boot.img`
 - Image SHA-256: `8ba7285acb631e178468b7db3d57723f4850455c70d6e0f3792243f3d5723f0a`
 - Kernel UUID: `13B38CEA-2E65-3B80-8BA1-E1DA7873C5D5`
 
@@ -48,21 +48,20 @@ Full device facts, source pins and flash-by-flash results: [`PORTING-SOCRATES.md
 
 ## Next steps
 
-1. Review the verified root image and installation plan under `research/ios-root/`. The Parallels Ubuntu build is complete; Apple source images remain under `research/ipsw/iPhone10_3-20H392/`. Critical backups are local under `backup/2026-11-08-socrates-critical/` and are not distributed in this repository.
-2. Obtain explicit confirmation to overwrite existing `userdata` with `ios16-root.simg`; personal Android data is not backed up. Keep GPT, bootloaders, recovery, modem, persist and backups intact.
-3. Temporarily boot the prepared `shim/out-mac/xnu-ios-root-boot.img` and verify HFS mounting and launchd. This root image has not yet booted on hardware.
-4. Bring up display/userland and adapt K60 Pro peripherals individually. Start CPU work with a read-only EPSS/L3 probe; use the banked sheng references for GPU, SPI/HID and Wi-Fi integration. Correct remaining CPU clock metadata in `mkadt.py` before enabling SMP/governor work.
+1. Let root boot #18 finish its initial launchd tasks and capture backboardd/SpringBoard progress or a stable error/panic. HFS and launchd now have screen evidence; a working interface is still pending.
+2. Keep the verified local backups and root images intact. `userdata` now contains the installed iOS root; personal Android data was not retained. The previous read-only probe image remains available, but current root-boot tests use `shim/out-mac/xnu-ios-root-boot.img` (SHA-256 `24f5852b6d42014ff19e39b692ec14da3a791d2c9433838691ea333ba178beb5`).
+3. Bring up display/userland and adapt K60 Pro peripherals individually. Start CPU work with a read-only EPSS/L3 probe; use the banked sheng references for GPU, SPI/HID and Wi-Fi integration. Correct remaining CPU clock metadata in `mkadt.py` before enabling SMP/governor work.
 
 ## How it boots
 
 ```
 Xiaomi bootloader (unlocked)
-  └─ fastboot boot xnu-boot.img      temporary: nothing is flashed to boot
+  └─ fastboot boot xnu-ios-root-boot.img   temporary kernel boot
      └─ shim                        loads XNU + the Apple device tree, wakes the UFS
         └─ XNU kernel (SWEET patches)  189-patch series on xnu-8796.141.3
-           └─ ufsroot0B / userdata      verified read-only; mount currently fails
-              └─ iOS root (HFS+)        planned installation in userdata
-                 └─ launchd → backboardd → SpringBoard   not reached
+           └─ ufsroot0B / userdata      storage probe verified; HFS+ root now installed
+              └─ iOS root (HFS+)        installed after user confirmation
+                 └─ launchd → backboardd → SpringBoard   launchd confirmed; UI pending
 ```
 
 ## Build a read-only kernel probe (macOS)
@@ -114,13 +113,14 @@ Note: the CI applies patches with `git apply` (strict, no fuzz) while validate-r
 The phone has no serial port — the panel is the only console, and photos of it are the evidence channel (OCR: `~/gittest/mik60proios/tools/vision-ocr.swift`).
 
 ```bash
-# 1. boot Android fully once, unlock, wait ~30 s  (clears dirty TZ state)
-# 2. one temporary boot per bootloader session:
-fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+# Before the first root installation, Android was used to establish clean TZ state.
+# With the iOS root installed, enter FASTBOOT directly (volume down + power).
+# One temporary boot per bootloader session:
+fastboot boot ~/gittest/ios-socrates/shim/out-mac/xnu-ios-root-boot.img
 # 3. photograph the panel (the kernel log) — including the SWEET UFS lines
 ```
 
-The M4 storage-only probe is now verified (flash #17): the kernel reports `SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only`, sets `BSD root: ufsroot0`, and reaches HFS mount failures/retries because an iOS root has not been installed. This proves storage access, not an iOS boot. After any attempt, `fastboot reboot bootloader` before the next `fastboot boot`.
+The M4 storage-only probe is now verified (flash #17): the kernel reports `SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only`, sets `BSD root: ufsroot0`, and reached HFS mount failures/retries before root installation. This proves storage access, not an iOS boot. After a large userdata flash, a software bootloader reboot may leave Mac USB transfers stuck at Sending. A physical volume-down + power reset to FASTBOOT restored boot transfer for #18. Keep kernel images temporary; ordinary Android boot now requires restoring its data filesystem.
 
 ## Repository layout
 
