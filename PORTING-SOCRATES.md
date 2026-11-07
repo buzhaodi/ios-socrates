@@ -536,10 +536,29 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' -> 'BSD root:
   ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
 
+### 2026-11-07 — flash #11 verdict: the SSU drew INVALID FIELD — the bBootLUNEn gate was missing; the full M2 order goes kernel-side (flash #12 4a652046…)
+
+- Flash #11 (d7c9c811; user-read + close-up OCR): TUR x3 (key 2, 04/02) -> 'reading the
+  flag' -> TUR x3 (04/02) -> 'command 0x1b failed ... asc 0x24' (INVALID FIELD IN CDB)
+  -> 'SSU ACTIVE rc 5' -> panic :5. The SSU rejection is the M2 v16/v17 lesson
+  resurfacing: the ABL disables the boot LU (bBootLUNEn=0) and the shim's green recipe
+  re-enables it (WRITE_ATTR idn 0x00 = 1, the upiu_query_val bytes) BEFORE any SSU -
+  flash #11's SSU drew INVALID FIELD because that gate was never set.
+- Fix (0f89539): 0028 gains ufs_query_val (the attribute value in osf3 cmd[19..22],
+  big-endian - the shim's upiu_query_val bytes); 0187 now chains the full M2 order:
+  TUR -> fDeviceInit -> WRITE_ATTR bBootLUNEn=1 ('bBootLUNEn rc %d') -> SSU
+  POWER_CONDITION=ACTIVE ('SSU ACTIVE rc %d') -> TUR -> GPT. 187 patches validate +
+  strict git-apply chain green. CI 42329728345 green, kernel 269a3a0d…
+- Flash #12 image shim/out-mac/xnu-boot.img sha 4a6520460843bbb51820c0d59535e9d90cd108
+  557d6f31d2fd52a12c3a36662b (bBootLUNEn + SSU + dev-init + sense prints verified inside).
+- Flash #12 expected: 'bBootLUNEn rc 0' -> 'SSU ACTIVE rc 0' -> TUR GREEN -> GPT ->
+  'SWEET UFS: "userdata" on LUN 0: first block 0x…, N MiB, read-only' -> 'BSD root:
+  ufsroot0' -> mountroot panic = M4 PROBE SUCCESS.
+
 ### Next concrete actions
-1. (user) M4 probe flash #11, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
-   (sha d7c9c811…): same drill. Success = 'SSU ACTIVE rc 0' -> 'userdata on LUN 0' ->
-   mountroot panic.
+1. (user) M4 probe flash #12, image ~/gittest/ios-socrates/shim/out-mac/xnu-boot.img
+   (sha 4a652046…): same drill. Success = 'bBootLUNEn rc 0' -> 'SSU ACTIVE rc 0' ->
+   'userdata on LUN 0' -> mountroot panic.
 2. (user) Photograph the lower half of the M2 panel — the partition list for the record.
 3. (user+agent) M0 backups over a recovery image (OrangeFox/TWRP for socrates) - needs the
    phone at hand; nothing destructive.

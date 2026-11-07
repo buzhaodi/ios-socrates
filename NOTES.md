@@ -2,19 +2,19 @@
 
 ## Agent handoff / active work
 
-### >>> SOCRATES (2026-11-07 13:00): flash #10's sense READ — key 2, ASC/ASCQ 04/02 ('INITIALIZING COMMAND REQUIRED', the M2 v6 disease); the v18 SSU-ACTIVE cure kernel-side (0187, kernel d57a4daf, CI 42327688341 green); flash #11 image d7c9c811… ready <<<
+### >>> SOCRATES (2026-11-07 14:00): flash #11 — SSU drew INVALID FIELD (asc 0x24) because the ABL disables the boot LU; the bBootLUNEn gate added (kernel 269a3a0d, CI 42329728345 green); flash #12 image 4a652046… ready <<<
 
 - This repo's `socrates` branch is the active campaign (Redmi K60 Pro, SM8550 -> iOS 16.7.16).
   Campaign plan + log: PORTING-SOCRATES.md (authoritative). This note only carries the state.
-- The M4-probe chain so far (all photo-decoded): #7 ABL link ALIVE + TUR CHECK CONDITION ->
-  #8 SET fDeviceInit 0xFF (already-done) -> #9 flag CLEAR, TUR still refused -> #10 sense
-  key 2 / 04/02 (user read it off the panel) -> #11 the M2 v18 cure: SSU POWER_CONDITION=
-  ACTIVE then TUR. The 0187 chain: TUR -> fDeviceInit -> TUR -> SSU ACTIVE -> TUR -> GPT.
-- Flash #11 image shim/out-mac/xnu-boot.img sha d7c9c811763a76c4998549121096072aade32b3d
-  de687928ea697f944886b8aa (SSU cdb bytes verified inside).
-- NEXT: (user) flash #11. Success = 'SSU ACTIVE rc 0' -> 'userdata on LUN 0' ->
-  mountroot panic = M4 probe done. Then M0 backups, then the iOS root into userdata
-  (destructive; explicit confirmation required - AGENTS.md).
+- Failure-point trajectory (photo-decoded): #7 TUR CHECK CONDITION -> #8 SET 0xFF ->
+  #9 flag clear, still refused -> #10 sense key 2 / 04/02 -> #11 SSU INVALID FIELD
+  (bBootLUNEn=0, the M2 v16 lesson) -> #12 the full M2 order kernel-side:
+  TUR -> fDeviceInit -> bBootLUNEn=1 -> SSU ACTIVE -> TUR -> GPT.
+- Flash #12 image shim/out-mac/xnu-boot.img sha 4a6520460843bbb51820c0d59535e9d90cd108
+  557d6f31d2fd52a12c3a36662b (verified inside).
+- NEXT: (user) flash #12. Success = 'bBootLUNEn rc 0' -> 'SSU ACTIVE rc 0' ->
+  'userdata on LUN 0' -> mountroot panic = M4 probe done. Then M0 backups, then the
+  iOS root into userdata (destructive; explicit confirmation required - AGENTS.md).
 
 ### >>> REVIEW (2026-11-05, user: "look into everything for conflicts and bugs and fix"; Metal agent) <<<
 
