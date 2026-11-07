@@ -1028,8 +1028,27 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   Await user photo of SMP service/PID/thread lines; acceptance is not UI proof.
   Local-only boot19-manifest.json / boot19-fastboot.log and full CI log retained.
 
+### 2026-11-08 — boot19 panel confirms sampler, early snapshots only launchd
+
+- OBSERVED user photo: SMP sample0 and sample1 both match1 watched process,
+  launchd[1]. No backboardd/SpringBoard/configd/xpcproxy sampled at those two
+  instants (does not establish they never execute). Thread PCs/count differ.
+  Subsequent launchd mount tasks and data-protection/exec seputil are visible;
+  no panic, framebuffer still0 frames. Early boot completion not in this photo.
+- Mount output: data volume missing but explicitly not required in env0;
+  GetMasterBlock error16 opening /dev/ufsroot0 (EBUSY per exact errno.h),
+  followed by /dev/ufsroot0 on / (hfs,local,journaled,noatime).
+  Bindfs lookup of hashed /private/preboot/.../usr/standalone/firmware fails
+  error2 (ENOENT). Later data-protection execution shows boot task advancement;
+  this does not prove every affected service succeeds or missing firmware safe.
+- launchd50MB Jetsam opt-in EINVAL also seen in historical donor boots that
+  later rendered UI (NOTES boot33); not sufficient evidence for changing limits.
+- No code/root modifications/new CI or boot from this panel analysis. Need
+  later samples after early boot before claiming a stable UI-service blocker.
+
 ### Next concrete actions
-1. Obtain boot19 panel image with SMP launchd/backboardd/SpringBoard lines.
-2. Diagnose absent services versus waiting/running threads before new fixes.
-3. Continue K60 drivers from banked sheng references once the next blocker is
-   established. Preserve root and protected partitions; backups stay local.
+1. Obtain later boot19 SMP sample, ideally after Early boot complete; inspect
+   whether backboardd/SpringBoard appear and their thread PCs.
+2. Diagnose actual stable endpoint. No speculative mount/entropy/security fixes
+   or repeat userdata flash based on these early warnings.
+3. Continue K60 drivers from banked sheng references; keep backups local.

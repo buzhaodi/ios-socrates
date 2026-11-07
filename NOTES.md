@@ -87,16 +87,24 @@
   check. Same root18 ADT/shim, new kernel; samples launchd,backboardd,
   SpringBoard,configd,xpcproxy after30s then every30s (40 rounds).
   Sending21388KB OKAY0.494s, Booting OKAY0.102s,total0.602s,exit0.
-  No userdata flash/erase or protected-partition writes. Bootloader acceptance
-  only; panel/service/rendering result UNKNOWN pending user image.
+  No userdata flash/erase or protected-partition writes. User panel now proves
+  SMP diagnostics running; samples0/1 each match only launchd among watched
+  names. Thread states differ; later mount/data-protection tasks still execute.
+  UI services not observed in those two snapshots; no UI frames or panic shown.
 - Boot19: shim/out-mac/xnu-ios-diag19-boot.img SHA256
   8f78035103b8784318803bd8a56a70cd5df0aa4eefec82526a4fddd857beccd3.
   Kernel59ef61cb5d3c7b875de0633957674fd12658199337919b805c2bb5872f87981a,
   UUID9CE757C0-F46F-393D-8B5A-24204ADDED7D. ADT SHA256aab86c5d... unchanged;
   packed shim/vendor DTB/payload/10 kernel segments/ADT/args byte-verified.
   Local logs: research/ios-root/boot19-fastboot.log,boot19-manifest.json;
-  xnu/out-flash19/ci.log. Boot18 retained. NEXT: user photo of SMP lines,
-  watched service names/PIDs/thread PCs to diagnose actual userland state.
+  xnu/out-flash19/ci.log. Boot18 retained. Boot19 photo shows mount reporting
+  data volume missing but not required, GetMasterBlock error16 (EBUSY), then
+  existing HFS root listed and a bindfs firmware-path lookup error2 (ENOENT).
+  It advances to data-protection / exec seputil afterward, so none of these
+  lines proves a fatal mount failure. Do not treat samples0/1 as the settled
+  post-earlyboot endpoint: boot18 already completed early boot successfully.
+  NEXT: later SMP sample after current early boot, especially UI service names
+  and thread PCs; no speculative mount/root changes or new reboot yet.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;
