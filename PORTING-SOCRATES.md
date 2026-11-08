@@ -1116,7 +1116,27 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   to measure actual loader progress. No memory/driver/security policy changes.
 - Local single-file AArch64 compile and192-patch validation PASS; full CI next.
 
+### 2026-11-08 — boot21 CI SUCCESS and temporary boot ACCEPTED
+
+- Boot21 source0a14762 CI42431906400 SUCCESS (192 patches); kernel SHA256
+  12a06850f4ccb2de29638df6ae453c88a60191f94df5e39c74a37c96b159dd8a,
+  UUID141D5CD6-01EB-3A42-BA23-63C79A10BF1F. Boot image
+  shim/out-mac/xnu-ios-diag21-boot.img SHA256
+  56aca100728f7b03d51ab1749dc79122a591bad5cab726876173b71f6c7cc49c.
+  Artifact SHA and10 packed kernel segments/unchanged ADT/shim/args verified.
+- User initially deferred testing, then explicitly confirmed FASTBOOT ready.
+  Rechecked image SHA and product=socrates; temporary boot21 ACCEPTED:
+  Sending21404KB OKAY0.494s,Booting OKAY0.102s,total0.599s,exit0.
+  No flash/erase or protected-partition writes. Panel outcome UNKNOWN.
+- New SMP lines: per-task faults/pageins and per-thread cpu user/sys +x0/x1/x20.
+  Compare at least two samples to distinguish changing image-header targets,
+  CPU progress and retry/stall. No inferred fix or RAM expansion applied.
+  Local boot21-manifest.json/boot21-fastboot.log and xnu/out-flash21/ci.log.
+- Read-only baseline-root launchd audit: backboardd and SpringBoard jobs exist,
+  KeepAlive/RunAtLoad true; disabled overrides only bluetoothd/fairplayd.H2.
+  Their startup definitions were not omitted by baseline-root preparation.
+
 ### Next concrete actions
-1. Full CI for0192, pack temporary boot21 with unchanged ADT/shim/root.
-2. Measure CPU/operand/fault deltas to choose an actual fix; stop guessing from
-   saved PC. Preserve current root/protected partitions and local-only backups.
+1. Obtain two boot21 SMP snapshots containing SpringBoard vm faults/pageins,
+   cpu user/sys,x0/x1/x20 and PC; compare actual progress before choosing fix.
+2. Preserve current root/protected partitions and local-only backups.
