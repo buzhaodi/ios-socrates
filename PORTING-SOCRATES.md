@@ -1066,8 +1066,24 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
 - Current256MiB memory may be a constraint; not proven to cause this stall.
   Do not grow RAM without validating safe device memory map/carveouts.
 
+### 2026-11-08 — boot20 enhanced diagnostics CI SUCCESS and temporary boot ACCEPTED
+
+- Source827172b; CI42403673631 SUCCESS (191 patches). Local two-file AArch64
+  compiles,series validation and20 executable regression cases PASS.
+- Kernel SHA2565bd62401a8155c35717f9343164cd681fbd2667979d4b69963a219a40b2c8966,
+  UUID2E8630E2-E136-3393-BB9D-88D0BAE4BA02. New image
+  shim/out-mac/xnu-ios-diag20-boot.img SHA256
+  58657d240aa3e74759cb844fb8339424f4224ec221e0e92f40a0bc20ed57e88b.
+  Artifact SHA and packed10 kernel segments,unchanged ADT/shim/args verified.
+- User confirmed fresh FASTBOOT; product=socrates/image SHA rechecked. Ran
+  temporary fastboot boot only:21404KB Sending OKAY0.493s,Booting OKAY0.102s,
+  total0.599s,exit0. No root reflash/erase or protected-partition writes.
+- Panel/memory/thread outcome UNKNOWN. Need SMP memory pages free/wanted and
+  SpringBoard ks state/wait/cont; scheduler values are best-effort snapshots,
+  not an atomic dump. Resolve continuation with kernel20,not17/19 symbols.
+- Local-only boot20-manifest.json/boot20-fastboot.log and full CI log retained.
+
 ### Next concrete actions
-1. Validate/commit0191, full kernel CI, prepare temporary boot20 with same ADT.
-2. Get kernel wait + VM stats before fixing dyld/GPU or changing RAM.
-3. Preserve root/protected partitions and local-only backups. Boot19 may remain
-   running while building; ask user for FASTBOOT only when boot20 is ready.
+1. Obtain boot20 SMP memory and SpringBoard kernel-state lines from user photo.
+2. Resolve wait context before changing memory map,dyld or GPU policy.
+3. Preserve root/protected partitions and local-only backups.

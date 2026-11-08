@@ -122,7 +122,19 @@
   state/wait-event/continuation/priority in SMP. No pointer dereferences or
   policy changes. Current256MiB RAM is a hypothesis to measure, NOT a proven
   cause or permission to guess larger memory ranges. Local2/2 AArch64 source
-  syntax compiles PASS. Full CI/build20 and hardware result still pending.
+  syntax compiles PASS;191-patch validation and20 UFS/shim/board cases PASS.
+- Source827172b CI42403673631 SUCCESS. Kernel20 SHA256
+  5bd62401a8155c35717f9343164cd681fbd2667979d4b69963a219a40b2c8966,
+  UUID2E8630E2-E136-3393-BB9D-88D0BAE4BA02. Boot20 image
+  shim/out-mac/xnu-ios-diag20-boot.img SHA256
+  58657d240aa3e74759cb844fb8339424f4224ec221e0e92f40a0bc20ed57e88b.
+  Artifact SHA256, packed10 segments/unchanged ADT/shim/args all verified.
+- User confirmed fresh FASTBOOT; product=socrates and image SHA rechecked.
+  TEMPORARY boot20 accepted:21404KB Sending OKAY0.493s,Booting OKAY0.102s,
+  total0.599s,exit0. No flash/erase. Panel result UNKNOWN pending user photo.
+  Local boot20-manifest.json/boot20-fastboot.log plus xnu/out-flash20/ci.log.
+  NEXT: capture SMP memory pages and SpringBoard ks state/wait/cont lines;
+  resolve continuation against exact kernel20 symbols before changing policy.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;

@@ -38,7 +38,7 @@ HFS then rejects the existing partition content (`unknown Volume Signature: 152e
 | 8 | Wi-Fi / Bluetooth | Port pending | sheng ath12k is a candidate; exact K60 Wi-Fi chip/PCI ID and board firmware still need verification |
 | 9 | Audio / haptics | Port pending | K60 board-specific codec, amplifier and motor integration remain |
 
-Latest verified build: [GitHub Actions 42401816409](https://github.com/buzhaodi/ios-socrates/actions/runs/42401816409), kernel source commit `63870c4`, patches **0001–0190**. Local validation passes, including 20 executable UFS/board-selection regression cases.
+Latest verified build: [GitHub Actions 42403673631](https://github.com/buzhaodi/ios-socrates/actions/runs/42403673631), kernel source commit `827172b`, patches **0001–0191**. Local validation passes, including 20 executable UFS/board-selection regression cases.
 
 Diagnostic patch 0190 is built separately to inspect launchd/backboardd/SpringBoard without enabling inherited SM8250 peripherals. Hardware results and the exact CI run are recorded in `NOTES.md` and `PORTING-SOCRATES.md`.
 
@@ -60,7 +60,7 @@ Full device facts, source pins and flash-by-flash results: [`PORTING-SOCRATES.md
 Xiaomi bootloader (unlocked)
   └─ fastboot boot xnu-ios-root-boot.img   temporary kernel boot
      └─ shim                        loads XNU + the Apple device tree, wakes the UFS
-        └─ XNU kernel (SWEET patches)  190-patch series on xnu-8796.141.3
+        └─ XNU kernel (SWEET patches)  191-patch series on xnu-8796.141.3
            └─ ufsroot0B / userdata      storage probe verified; HFS+ root now installed
               └─ iOS root (HFS+)        installed after user confirmation
                  └─ launchd → backboardd → SpringBoard   launchd confirmed; UI pending
@@ -126,7 +126,7 @@ The M4 storage-only probe is now verified (flash #17): the kernel reports `SWEET
 
 ## Repository layout
 
-- `xnu/patches/` — the 190-patch series on xnu-8796.141.3 (the SWEET machine config + drivers; socrates work: 0010/0012 early console, 0028 UFS root + wake, 0187 root diagnostics, 0188 standard UFS protocol fixes, 0189 the socrates peripheral gate, 0190 independent process diagnostics)
+- `xnu/patches/` — the 191-patch series on xnu-8796.141.3 (the SWEET machine config + drivers; socrates work: 0010/0012 early console, 0028 UFS root + wake, 0187 root diagnostics, 0188 standard UFS protocol fixes, 0189 the socrates peripheral gate, 0190 independent process diagnostics, 0191 memory/thread wait diagnostics)
 - `shim/` — the boot shim (aarch64 freestanding, builds with Homebrew clang+lld)
 - `tools/` — `mkadt.py` (Apple device tree builder), `mkpayload.py`, `mkbootimg_v0.py`, `qemu-sweet.py` (the QEMU harness), `build-ios-root.sh` (iPhone X root builder, needs Linux)
 - `wifi/` — the inherited LinuxKPI compat layer for ath11k (not yet a verified K60 Wi-Fi driver); `userland/` — Mesa, the CoreAnimation bridge, audio, Bluetooth
