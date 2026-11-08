@@ -225,6 +225,23 @@
   f6f23b464caa03430d17ad081b8b7db1a66bd80cb18fc7db9bea836f17ec1a00.
   Local boot23-manifest.json/pack-boot23.py. NEXT: temporary boot23 when user
   ready; inspect normal exec backboardd/SpringBoard/crash and any actual frames.
+- User requests direct log collection instead of photos; prioritize transport
+  before further bring-up experiments. Read-only audit: adb devices currently
+  empty; no verified phone serial endpoint (do not assume host cu.debug-console
+  or cu.SIMGOTEH500 belongs to phone). No local recovery/ image found here.
+- Existing transport: sweet_log_ring4MiB captures console already; persistent
+  sweet_log_start writes last1025 4KiB userdata blocks (4198400B), but0189
+  socrates return currently skips its startup. tools/sweet-log-pull.sh can
+  READ tail via root recovery ADB then tools/sweet-log.py decodes. It needs
+  macOS stat portability fix and strict device/size/output checks before use.
+- Feasible next route: explicitly enabled persistent logger with validated
+  filesystem/log-tail nonoverlap,then temporary K60-compatible recovery/root
+  ADB extraction. Not live USB,not currently working end-to-end. Need suitable
+  recovery image/transport verified; stock backed-up recovery alone is not
+  proof of an accessible root ADB shell. No logger enable/device writes done.
+- Live USB sweet_log_copy/sweet_usb.c exists for legacy hardware but K60 USB
+  setup remains skipped/unported. Hardware UART requires verified board pins
+  and adapter; no claim that ordinary USB cable provides serial console.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;

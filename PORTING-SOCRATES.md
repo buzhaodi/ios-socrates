@@ -1185,8 +1185,28 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   Local boot23-manifest.json/pack-boot23.py. NEXT: temporary boot23 when user
   ready; inspect normal exec backboardd/SpringBoard/crash and any actual frames.
 
+### 2026-11-08 — direct log collection feasibility audited at user request
+
+- User requests direct log collection instead of photos; prioritize transport
+  before further bring-up experiments. Read-only audit: adb devices currently
+  empty; no verified phone serial endpoint (do not assume host cu.debug-console
+  or cu.SIMGOTEH500 belongs to phone). No local recovery/ image found here.
+- Existing transport: sweet_log_ring4MiB captures console already; persistent
+  sweet_log_start writes last1025 4KiB userdata blocks (4198400B), but0189
+  socrates return currently skips its startup. tools/sweet-log-pull.sh can
+  READ tail via root recovery ADB then tools/sweet-log.py decodes. It needs
+  macOS stat portability fix and strict device/size/output checks before use.
+- Feasible next route: explicitly enabled persistent logger with validated
+  filesystem/log-tail nonoverlap,then temporary K60-compatible recovery/root
+  ADB extraction. Not live USB,not currently working end-to-end. Need suitable
+  recovery image/transport verified; stock backed-up recovery alone is not
+  proof of an accessible root ADB shell. No logger enable/device writes done.
+- Live USB sweet_log_copy/sweet_usb.c exists for legacy hardware but K60 USB
+  setup remains skipped/unported. Hardware UART requires verified board pins
+  and adapter; no claim that ordinary USB cable provides serial console.
+
 ### Next concrete actions
-1. Temporary sampler-free boot23 after FASTBOOT readiness; no root reflash.
-2. Check normal service exec/crash/frame output before attributing UI failure
-   to storage,CPU or sampler. Backboardd/GPU still not verified.
-3. Preserve root/protected partitions and local-only backups.
+1. Establish direct log retrieval before more photo-driven diagnostic boots:
+   prepare guarded persistent logging and verify temporary recovery/root ADB.
+2. Keep real-time USB and UART as separate unverified transport work.
+3. Preserve root/protected partitions; keep all dumps/backups/logs local.
