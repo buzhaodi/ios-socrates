@@ -1161,8 +1161,32 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   sys/pagein deltas and boot progress. Do not claim sleeping branch executed
   merely because option is present; infer carefully from outcome/wait context.
 
+### 2026-11-08 — boot22 early boot complete; sampler interference audit; boot23 ready
+
+- Boot22 user photos OBSERVED: bootargs explicitly include ufswait=1;
+  slide0x50b3c000. Early boot complete, exec SpringBoard and many xpcproxy,
+  zero UI frames/no shown panic. Sample5 shows memory free3699,active3076,
+  inactive114,wired4439,wanted0,privileged0 (16KiB pages),but no subsequent
+  process lines in submitted photos. Do not assert deadlock or speedup solely
+  from this: no late SpringBoard CPU/pagein pair captured for comparison.
+- Source audit: proc_iterate(PROC_ALLPROCLIST) calls proc_transwait before
+  every callback,including unwatched processes. sweet_sample_task holds
+  task_lock while vm_map_read_user/copyin can block/page-fault,as documented
+  in vm_map.c. These are OBSERVED diagnostic interference risks; NOT proven
+  cause of zero UI or confirmed hardware deadlock. Do not keep escalating
+  sampler complexity before establishing a sampler-free baseline.
+- Boot23 READY NOT BOOTED: same21 kernel/CI42431906400,ADT/shim/root as22;
+  ONLY replace sweetsample=list with sweetsample=-,retain ufswait=1. Existing
+  sampler returns before process iteration/stack reads. Normal exec/framebuffer
+  logging remains. Packed10 segments/ADT/args verified,all payload bytes outside
+  cmdline identical to22. No source change,new CI or userdata reflash.
+  Image shim/out-mac/xnu-ios-diag23-boot.img SHA256
+  f6f23b464caa03430d17ad081b8b7db1a66bd80cb18fc7db9bea836f17ec1a00.
+  Local boot23-manifest.json/pack-boot23.py. NEXT: temporary boot23 when user
+  ready; inspect normal exec backboardd/SpringBoard/crash and any actual frames.
+
 ### Next concrete actions
-1. Temporary boot22 after user FASTBOOT readiness; no root reflash.
-2. Compare kernel CPU/pagein progress with21; measure before changing UFS/VM
-   policy or CPU frequencies. GPU/UI remains unverified and unported.
+1. Temporary sampler-free boot23 after FASTBOOT readiness; no root reflash.
+2. Check normal service exec/crash/frame output before attributing UI failure
+   to storage,CPU or sampler. Backboardd/GPU still not verified.
 3. Preserve root/protected partitions and local-only backups.
