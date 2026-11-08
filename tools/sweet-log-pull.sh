@@ -28,5 +28,8 @@ bytes=$($ADB shell blockdev --getsize64 "$dev" | tr -d '\r')
 skip=$((bytes / 4096 - 1025))
 mkdir -p "$(dirname "$out")"
 $ADB exec-out "dd if=$dev bs=4096 skip=$skip count=1025 2>/dev/null" > "$out.bin"
-echo "$dev: $bytes bytes, read blocks $skip.. ($(stat -c %s "$out.bin") bytes)" >&2
+# adb exec-out is binary-clean; require the exact expected size (macOS stat: -f %z).
+size=$(stat -f %z "$out.bin" 2>/dev/null || stat -c %s "$out.bin")
+[ "$size" = "4198400" ] || { echo "Error: expected 4198400 bytes, got $size" >&2; exit 1; }
+echo "$dev: $bytes bytes, read blocks $skip.. ($size bytes)" >&2
 python3 "$(dirname "$0")/sweet-log.py" "$out.bin" "$out"
