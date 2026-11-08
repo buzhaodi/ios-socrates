@@ -2,6 +2,15 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — user physically disconnected battery
+
+- USER REPORT: phone opened and battery disconnected; reconnect/boot result pending.
+- Advice: disconnect USB/charger too; allow 1–2 minutes as a practical reset interval,
+  not a verified K60 Pro PMIC specification. Reconnect carefully with external power
+  absent and tools clear, then try volume-down + power for fastboot. No shorting pads.
+- No device commands, writes or CI runs. Recovery remains unverified.
+
+
 ### 2026-11-08 — rescue research correction; phone still unresponsive
 
 - Latest USER REPORT: black screen, no charging indication or USB enumeration after

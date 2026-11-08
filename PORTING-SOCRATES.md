@@ -1394,3 +1394,11 @@ Where this leaves the log-transport work:
   https://www.mi.com/service (official repair locator/contact).
 - Research/documentation only; recovery remains UNRESOLVED. No downloaded artifacts or
   device identifiers added to git. Commit: this documentation-only rescue correction.
+
+### 2026-11-08 — user physically disconnected battery
+
+- USER REPORT: phone opened and battery disconnected; reconnect/boot result pending.
+- Advice: disconnect USB/charger too; allow 1–2 minutes as a practical reset interval,
+  not a verified K60 Pro PMIC specification. Reconnect carefully with external power
+  absent and tools clear, then try volume-down + power for fastboot. No shorting pads.
+- No device commands, writes or CI runs. Recovery remains unverified.
