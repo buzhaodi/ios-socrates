@@ -1,0 +1,42 @@
+From: socrates bring-up
+Subject: [PATCH] sweet: sample CPU progress, loader operands and task fault counts
+
+Boot20 samples5/6 show a runnable SpringBoard at the same dyld load with
+free pages available. That does not distinguish a loader walking different
+images from a fault retry or no CPU progress. Show cumulative user/system
+time, saved x0/x1/x20 and task fault/pagein counters in the existing sampler.
+Keep execution, VM policy and hardware state unchanged.
+
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -1024,12 +1024,16 @@
+ 	}
+ 	printf("SMP %s[%d] slide 0x%llx mh 0x%llx\n", name, pid, slide, task->mach_header_vm_address);
+ 
++	printf("SMP %s vm faults %llu pageins %llu\n", name,
++	    (unsigned long long)counter_load(&task->faults),
++	    (unsigned long long)counter_load(&task->pageins));
+ 	task_lock(task);
+ 	queue_iterate(&task->threads, thread, thread_t, task_threads) {
+ 		arm_saved_state_t *ss = find_user_regs(thread);
+ 		char line[400];
+ 		int n;
+ 		uint64_t fp;
++		time_value_t user_time, system_time;
+ 
+ 		if (ss == NULL || !is_saved_state64(ss)) {
+ 			continue;
+@@ -1039,6 +1043,13 @@
+ 		printf("SMP %s t%d ks state 0x%x wait 0x%llx cont 0x%llx pri %d\n",
+ 		    name, tn, thread->state, (unsigned long long)thread->wait_event,
+ 		    (unsigned long long)(uintptr_t)thread->continuation, thread->sched_pri);
++		thread_read_times(thread, &user_time, &system_time, NULL);
++		printf("SMP %s t%d cpu user %d.%06d sys %d.%06d x0 0x%llx x1 0x%llx x20 0x%llx\n",
++		    name, tn, user_time.seconds, user_time.microseconds,
++		    system_time.seconds, system_time.microseconds,
++		    (unsigned long long)get_saved_state_reg(ss, 0),
++		    (unsigned long long)get_saved_state_reg(ss, 1),
++		    (unsigned long long)get_saved_state_reg(ss, 20));
+ 		fp = get_saved_state_fp(ss);
+ 		n = snprintf(line, sizeof(line), "SMP %s t%d pc 0x%llx lr 0x%llx sp 0x%llx bt", name, tn++,
+ 		    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss));

@@ -1102,8 +1102,21 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   current later full SMP memory+SpringBoard kernel-state/PC more useful.
   Only local report/manifest and handoff updated; no new code/CI/device boot.
 
+### 2026-11-08 — user repeats boot20; samples5/6 preserve same loader PC
+
+- User manually ran provided temporary boot20 command;12 photos show new slide
+  0x3791c000. Host transfer acknowledgment not recorded for this user-run retry.
+  SpringBoard27 sample5/6 PC/LR0x1dbf2fd08 -> dyld forEachSection+52,
+  same state4/wait0/cont0/pri47. Sample6 matched7, no backboardd/configd.
+  Free pages4871->3717 (76.109375->58.078125MiB),wanted0/privileged0;
+  zero frames/no shown panic. Same instruction can access distinct images;
+  fixed PC alone still does not prove a spin or a particular page fault.
+- Existing screenshots sufficient; no further boot20 photo/reboot requested.
+  Patch0192 adds CPU user/system time,saved x0/x1/x20 and task faults/pageins
+  to measure actual loader progress. No memory/driver/security policy changes.
+- Local single-file AArch64 compile and192-patch validation PASS; full CI next.
+
 ### Next concrete actions
-1. Compare a later full boot20 SMP memory + SpringBoard ks/pc snapshot.
-2. If still runnable at a load, inspect fault retries/scheduler progress; a
-   saved user PC and best-effort state alone do not identify a kernel fault.
-3. Preserve current root/protected partitions and local-only backups.
+1. Full CI for0192, pack temporary boot21 with unchanged ADT/shim/root.
+2. Measure CPU/operand/fault deltas to choose an actual fix; stop guessing from
+   saved PC. Preserve current root/protected partitions and local-only backups.

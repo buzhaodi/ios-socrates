@@ -152,6 +152,19 @@
   Local exact symbolication report research/ios-root/boot20-springboard-symbols.txt.
   NEXT: compare a later full sample. If PC persists runnable at a load, inspect
   user-abort/fault retry and scheduler progress before adding any fix.
+- User repeated boot20 manually via provided fastboot boot command. New12
+  photos (boot20 retry, slide0x3791c000): samples5/6 show SpringBoard27 at
+  PC/LR0x1dbf2fd08 -> unslid0x1a4613d08, same dyld forEachSection load.
+  Both ks state4/wait0/cont0/pri47. No backboardd/configd in complete sample6;
+  matched7 (SpringBoard,launchd,5 xpcproxy). PC persistence now OBSERVED across
+  samples5/6, but it may be walking distinct image headers at that instruction.
+  Free4871->3717 pages (76.109375->58.078125MiB),wanted/privileged0; no shown
+  panic. Earlier setup/protection warnings still followed by later tasks.
+- No more photos requested for boot20. Patch0192 adds cumulative per-thread
+  user/system CPU time, saved x0/x1/x20 and task fault/pagein counters. Purpose:
+  distinguish loader progress, fault retries and no scheduler progress rather
+  than infer spin from PC alone. No execution/policy/hardware changes.
+  Local1/1 AArch64 syntax compile and192-patch validation PASS. Full CI pending.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;
