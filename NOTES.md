@@ -2,6 +2,36 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — rescue research correction; phone still unresponsive
+
+- Latest USER REPORT: black screen, no charging indication or USB enumeration after
+  cable/port swaps, all listed key combinations, 30-minute charging and three-hour rest.
+  No new live device probe, boot, flash, slot change or CI run in this research turn.
+- Corrections supersede earlier rescue assumptions: the exact ABL v0-parser hang is
+  NOT established without a trace; boot_a flash/slot switch temporally preceded failure.
+  No USB enumeration does not prove USB-PHY damage. Three-hour rest is NOT a verified
+  battery disconnect or PMIC reset; power/battery faults remain unexcluded.
+- Next recommended action: qualified repair technician checks battery/supply and performs
+  physical battery disconnect/reconnect, then attempts fastboot. If unavailable, identify
+  board-matched EDL test points and test for 9008. No verified socrates pinout obtained;
+  do not reuse K60/K60E diagrams or guess shorting points. If still no enumeration after
+  verified power/reset/test-point procedure, proceed to hardware diagnosis.
+- EDL enumeration, compatible signed programmer, and authentication are separate gates.
+  Neither installed bkerler/edl nor a ROM firehose guarantees SM8550 access. Public older
+  Xiaomi authentication successes do not establish socrates support. Loader availability
+  in an arbitrary OTA/firmware ZIP is unverified. No paid service/tool endorsed.
+- If fastboot returns: inspect product/current slot and propose restoring selection to b
+  for explicit approval. Do NOT automatically zero boot_a or edit GPT attributes; the old
+  all-zero boot_a backup is not a bootable image. Preserve userdata/log tail and protected
+  partitions. Android userdata was already replaced by iOS, so slot b is not a promise of
+  normal Android startup. Any device mutation still requires concrete approval.
+- Sources checked: https://github.com/bkerler/edl (generic entry methods/limitations),
+  https://github.com/bkerler/edl/discussions/568 (model-dependent Xiaomi authentication),
+  https://www.mi.com/service/support/startup (official no-power troubleshooting),
+  https://www.mi.com/service (official repair locator/contact).
+- Research/documentation only; recovery remains UNRESOLVED. No downloaded artifacts or
+  device identifiers added to git. Commit: this documentation-only rescue correction.
+
 ### >>> SOCRATES (2026-11-08): critical backup VERIFIED; iOS root BUILT/VERIFIED; userdata INSTALLED; boot18 HFS + launchd HARDWARE PASS; early boot COMPLETE, zero UI frames <<<
 
 - Target is K60 Pro ONLY. User authorized local backups and explicitly forbids
