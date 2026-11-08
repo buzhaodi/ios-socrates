@@ -2,6 +2,19 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — user-supplied YouTube test-point video inspected
+
+- URL https://www.youtube.com/watch?v=j_9sw3jJLqU opened in browser. Title and
+  expanded author description explicitly say Xiaomi Redmi K60, not K60 Pro/socrates.
+  Author GSM SANJOY; player duration 1:08. Inspected frames ~0:02,0:34,1:01 show a
+  board image with red pointer lines; these sampled frames do not show a live shorting
+  procedure or successful host 9008 enumeration. Do not claim all frames were watched.
+- Page discloses altered/AI-generated audio or visual content; this alone does not prove
+  the board image false. Main limitation is unverified device/board match and endpoints.
+- No K60 Pro shorting instructions can be inferred from this video. Await clear photo
+  of user's accessible board/board markings and matching authoritative circuit evidence.
+  No device command/write or CI run. Recovery unresolved.
+
 ### 2026-11-08 — confirmed Mac connection; reset/test-point research
 
 - User confirms battery reconnected AND USB data cable connected. Fresh ioreg IOUSB
