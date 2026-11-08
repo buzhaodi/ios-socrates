@@ -1242,14 +1242,16 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   cpufreq is its own M6; UFS read coalescing after M7. One variable at a time.
 
 ### Next concrete actions
-1. Boot23 long run (image READY and SHA-verified f6f23b46…; sampler removed, ufswait=1
-   kept): watch for exec backboardd, SpringBoard load completion vs crash loop, panic.
-   Zero frames is expected (GPU-only rendering); do not treat it as failure.
-2. Log transport (agreed priority): re-enable sweet_log_start for socrates behind the
+1. Log transport (agreed priority): re-enable sweet_log_start for socrates behind the
    0189 gate (userdata tail 1025x4KiB, outside the 16GiB HFS root — verify nonoverlap),
    fix tools/sweet-log-pull.sh stat portability, verify recovery/root-ADB extraction.
    This is prerequisite infrastructure for M7 debugging (GPU bring-up needs real logs,
-   not photos).
+   not photos). No logger writes or extraction path are yet hardware-verified.
+2. Boot23 only after a direct log path is ready (image READY and SHA-verified
+   f6f23b46…; sampler removed, ufswait=1 kept): compare system boot progress
+   and actual delays from complete logs. User reports the current text-console
+   boot has run nearly ten minutes; the exact blocker is not established.
+   Zero frames is expected until the GPU path exists.
 3. Start M7 (the UI gate): default-off read-only a740/GMU/SMMU probe patch, modeled on
    the EPSS probe plan; extract GMU firmware from the live K60 into research/ (gitignored).
 4. Then SMP/cpufreq speedups, each as its own milestone with mkadt /cpus data fixed first.

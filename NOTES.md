@@ -229,6 +229,12 @@
   before further bring-up experiments. Read-only audit: adb devices currently
   empty; no verified phone serial endpoint (do not assume host cu.debug-console
   or cu.SIMGOTEH500 belongs to phone). No local recovery/ image found here.
+- User reports the current text-console boot has continued for nearly ten minutes
+  with errors and no graphical UI. This wall time is abnormal for a useful
+  interactive boot, but the submitted photos do not establish the precise
+  blocking call or a kernel panic. Stop asking for repetitive screen photos or
+  an indefinite wait. Latest shown error lines precede later launchd/FIPS
+  progress; their causal role is unverified. Boot23 remains untested.
 - Existing transport: sweet_log_ring4MiB captures console already; persistent
   sweet_log_start writes last1025 4KiB userdata blocks (4198400B), but0189
   socrates return currently skips its startup. tools/sweet-log-pull.sh can
@@ -239,6 +245,10 @@
   ADB extraction. Not live USB,not currently working end-to-end. Need suitable
   recovery image/transport verified; stock backed-up recovery alone is not
   proof of an accessible root ADB shell. No logger enable/device writes done.
+- NEXT: make direct full-log retrieval work end to end, then use the logs to
+  identify the actual long boot delay. Do not put another photo-driven boot
+  ahead of the logging path. Keep the logger disabled until the tail boundary,
+  extraction route and required device-write authorization are concrete.
 - Live USB sweet_log_copy/sweet_usb.c exists for legacy hardware but K60 USB
   setup remains skipped/unported. Hardware UART requires verified board pins
   and adapter; no claim that ordinary USB cable provides serial console.

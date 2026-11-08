@@ -30,3 +30,11 @@ research/
 xnu/out/
 shim/out/
 shim/out-mac/
+# 读图工作流产物：照片转写稿可能含串号与丝印（AGENTS.md 规则）
+transcripts/
+/.zcode
+shim/.DS_Store
+tools/.DS_Store
+xnu/.DS_Store
+.github/.DS_Store
+.DS_Store
