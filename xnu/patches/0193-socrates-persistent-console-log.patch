@@ -1,0 +1,32 @@
+From: socrates bring-up
+Subject: [PATCH] socrates: keep the persistent console log behind the board gate
+
+Photo-transcribing the panel is the only working log channel on socrates,
+and the user wants direct log retrieval. The persistent console logger
+(sweet_log_start, xnu 0028-series: 4 MiB ring captured from _cnputs since
+M3, flushed by its own thread to the LAST 1+SWEET_LOG_BLOCKS*4KiB of the
+root partition every ufslogsecs seconds, boot-arg sweetlog=0 disables)
+needs no unported MMIO: it is the same polled UFS path the root itself
+uses. Move it inside the socrates branch, BEFORE sweet_sample_start, so the
+log also covers sampler start; the non-socrates path keeps its existing
+order (log after cpufreq/gpu as before).
+
+Geometry safety: the log area starts at partition block
+nblocks - 1 - 1024 (4 MiB + 4 KiB before the partition end). The 16 GiB
+HFS+ root image ends at block 4194304 (16 GiB / 4 KiB); userdata holds
+229451 MiB = 58635776 blocks. The log area (blocks 58634751..58635775)
+is ~170 GiB past the HFS end: no overlap possible. sweet_log_start's
+own guards remain (requires su.writable and nblocks >= 2*SWEET_LOG_BLOCKS).
+
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -1113,6 +1113,9 @@
+ 	 * available without touching unported clocks/input/USB/RPMh hardware.
+ 	 * Bring up the SM8550 peripherals individually in later milestones. */
+ 	if (ufs_is_socrates()) {
++		/* Persistent console log first: same polled UFS the root uses, no
++		 * unported MMIO. Its own guards (writable, partition size) apply. */
++		sweet_log_start();
+ 		/* Pure process diagnostics; no legacy peripheral MMIO. */
+ 		sweet_sample_start();
+ 		printf("SWEET UFS: socrates root ready; unported SM8250 peripherals skipped\n");
