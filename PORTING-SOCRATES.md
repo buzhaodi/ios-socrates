@@ -1083,7 +1083,27 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   not an atomic dump. Resolve continuation with kernel20,not17/19 symbols.
 - Local-only boot20-manifest.json/boot20-fastboot.log and full CI log retained.
 
+### 2026-11-08 — boot20 panel: early boot complete, free memory, runnable SpringBoard
+
+- User four photos: early setup/tasks progress, launchd cache accepted,
+  Early boot complete and exec SpringBoard. Sample5 SpringBoard26 state0x4,
+  wait0,cont0,pri47: runnable/on-runqueue, not a synchronized CPU execution
+  measurement. No backboardd demonstrated;0 UI frames and no shown panic.
+- Sample5 counters (16KiB pages): free4878=76.21875MiB,active2326,inactive114,
+  wired3939,wanted0,privileged0. Early sample1 free10168,wanted0. No evidence
+  for free-page exhaustion in these snapshots; do not expand RAM speculatively.
+- SpringBoard sample5 slide0x4d900000,PC0x1f1f13d08 -> unslid0x1a4613d08,
+  dyld MachOFile::forEachSection+52 (`ldr w8,[x20,#4]`). Stack remains
+  forEachDOFSection -> notifyDtrace -> prepare -> start as boot19. One complete
+  late snapshot in these photos is insufficient to prove a persistent loop.
+- Early launchd waits: exact kernel20 workq_unpark_continue at77ef368,
+  __sleep_continue at78940a8; do not attribute them to SpringBoard.
+- User offered reboot to capture missed startup errors; advised no restart now,
+  current later full SMP memory+SpringBoard kernel-state/PC more useful.
+  Only local report/manifest and handoff updated; no new code/CI/device boot.
+
 ### Next concrete actions
-1. Obtain boot20 SMP memory and SpringBoard kernel-state lines from user photo.
-2. Resolve wait context before changing memory map,dyld or GPU policy.
-3. Preserve root/protected partitions and local-only backups.
+1. Compare a later full boot20 SMP memory + SpringBoard ks/pc snapshot.
+2. If still runnable at a load, inspect fault retries/scheduler progress; a
+   saved user PC and best-effort state alone do not identify a kernel fault.
+3. Preserve current root/protected partitions and local-only backups.

@@ -131,10 +131,27 @@
   Artifact SHA256, packed10 segments/unchanged ADT/shim/args all verified.
 - User confirmed fresh FASTBOOT; product=socrates and image SHA rechecked.
   TEMPORARY boot20 accepted:21404KB Sending OKAY0.493s,Booting OKAY0.102s,
-  total0.599s,exit0. No flash/erase. Panel result UNKNOWN pending user photo.
+  total0.599s,exit0. No flash/erase. Panel now proves sampler/early boot below.
   Local boot20-manifest.json/boot20-fastboot.log plus xnu/out-flash20/ci.log.
-  NEXT: capture SMP memory pages and SpringBoard ks state/wait/cont lines;
-  resolve continuation against exact kernel20 symbols before changing policy.
+- Boot20 photos OBSERVED: launchd cache sent successfully, Early boot complete,
+  exec SpringBoard. Sample5 SpringBoard26 ks state0x4 (runnable/on-runqueue,
+  NOT proof it is executing),wait0,cont0,pri47. PC0x1f1f13d08 with slide
+  0x4d900000 -> unslid0x1a4613d08 dyld MachOFile::forEachSection+52,
+  ldr w8,[x20,#4]. Chain forEachDOFSection/notifyDtrace/prepare/start matches
+  boot19 loader stage, not normal UI. This photo has only one complete late
+  sample; need another late snapshot to establish persistence in boot20.
+- Sample5 VM: free4878,active2326,inactive114,wired3939,wanted0,privileged0,
+  pagebytes16384. Free76.21875MiB at that instant: no evidence of free-page
+  exhaustion then, but does not rule out future RAM constraints. Early sample1
+  free10168,wanted0,privileged0. No RAM expansion justified by these readings.
+- Boot20 early launchd continuations resolved against exact kernel20:
+  0xfffffe00077ef368=workq_unpark_continue;0xfffffe00078940a8=__sleep_continue.
+  These are not SpringBoard wait evidence. Latest frames still0; no panic shown.
+- User offered restart to photograph missed early errors. Told not needed now;
+  obtain current later SMP memory+SpringBoard ks/pc instead, preserve state.
+  Local exact symbolication report research/ios-root/boot20-springboard-symbols.txt.
+  NEXT: compare a later full sample. If PC persists runnable at a load, inspect
+  user-abort/fault retry and scheduler progress before adding any fix.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;
