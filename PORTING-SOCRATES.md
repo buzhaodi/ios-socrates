@@ -41,7 +41,7 @@ launchd or SpringBoard success.
 | 4c | launchd/backboardd/SpringBoard | launchd running; UI pending | Boot18 DONE EARLYBOOT SETUP / DONE UMD_INIT and launchd jobs confirmed; done when SpringBoard draws on K60 Pro |
 | 5 | Goodix touch | Hardware identified; port pending | Android identifies goodix_ts; verify exact Goodix protocol/firmware/IRQ/pins, then taps work |
 | 6 | Buttons/backlight/CPU frequency | Port pending | EPSS reference reviewed and live3+4+1 topology verified; unported SM8250 initializers skipped; done when K60 controls and clock policy work |
-| 7 | GPU acceleration | Hardware identified; port pending | Adreno740v2 confirmed; sheng A740/GMU/SMMU/Metal references reviewed; done when GPU renders K60 UI |
+| 7 | GPU acceleration | **The UI gate**; hardware identified; port pending | Code-reading 2026-11-08: rendering in this tree is GPU-only (CoreAnimation->Metal->Mesa->SweetGPU a650); no CPU fallback. Done when a740 renders K60 UI — no pixels before this |
 | 8 | Wi-Fi/Bluetooth | Port pending | Identify K60 radio and board firmware; sheng ath12k is a candidate; done with scan/association/internet and tested Bluetooth |
 | 9 | Audio/haptics | Port pending | Verify K60 codec/amps/motor; done with sound and vibration |
 
@@ -1205,8 +1205,52 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
   setup remains skipped/unported. Hardware UART requires verified board pins
   and adapter; no claim that ordinary USB cable provides serial console.
 
+### 2026-11-08 — code-reading: rendering is GPU-only; UI pixels are gated on M7, not on waiting
+
+- The user's observation "一直在走 就是不见图形界面" is fully consistent with the boot21
+  data (faults/pageins/sys-time all climbing: loader actively paging) AND with a
+  code-reading conclusion that reframes M4c: even after SpringBoard finishes loading
+  and backboardd presents, frames stay 0 BY DESIGN until the Adreno 740 port lands.
+- Sources (buildtree17, all read, not guessed):
+  - iokit/Kernel/arm/SweetFramebuffer.cpp: the IOMobileFramebuffer AppleCLCD already
+    runs on socrates (console + heartbeat prove it) and has a CPU-copy present path
+    for displays that cannot page-flip (sweet_flip/MDP is SM8250, gated off here) —
+    so PRESENTING is not the missing piece.
+  - iokit/Kernel/arm/SweetGPU.cpp header: "apollo's Adreno 650 for programs to draw
+    with" — register-level a650 bring-up (bsd/dev/sweet_gpu.c, patches 0100-0112,
+    boot-arg sweetgpu=N) exposing HackiOS RedwoodGPU's msm-DRM ABI so userland
+    Mesa/freedreno (Turnip, tools/mesa redwood-drm) renders. SweetFramebuffer waits
+    on sweet_gpu_surface_ready() for GPU-drawn surfaces. iOS 16 has NO CPU software
+    renderer in this tree: CoreAnimation->Metal->Mesa->SweetGPU is the only draw path.
+  - bsd/dev/sweet_ufs.c 0189 gate: on socrates ONLY sweet_sample_start() runs;
+    sweet_gpu_init/sweet_log_start/touch/keys/backlight/audio all skipped (a650 MMIO
+    would fault like flash16's EPSS abort did).
+- Consequences:
+  1. "SpringBoard draws" (M4c's criterion) cannot pass before M7 has at least a
+     minimal a740 path (kernel sweet_gpu port + userland mesa a7xx). Zero frames
+     after load completion is EXPECTED, not a new failure.
+  2. boot23's success criteria are therefore pipeline-only: SpringBoard load
+     completes, backboardd execs and stays alive, no crash/respawn loop, no panic.
+     Pixels are explicitly NOT a boot23 pass/fail signal.
+  3. M7 becomes the critical path to UI. First step follows the EPSS discipline:
+     default-off, read-only a740/GMU/SMMU probe (sheng references: Adreno740 kext,
+     ShengGmu.c, ShengGpuSmmu.c; GMU firmware from the live K60), THEN rendering.
+- Performance context (why loading crawls): single CPU (cpus=1 in the ADT) at the
+  bootloader's fixed frequency + polled single-slot UFS + cold HFS+ metadata reads.
+  Fixes are staged, not mixed into the M4c verdict: SMP enable needs the mkadt /cpus
+  topology/frequency data corrected first (still 4+3+1 nominal, live is 3+4+1);
+  cpufreq is its own M6; UFS read coalescing after M7. One variable at a time.
+
 ### Next concrete actions
-1. Establish direct log retrieval before more photo-driven diagnostic boots:
-   prepare guarded persistent logging and verify temporary recovery/root ADB.
-2. Keep real-time USB and UART as separate unverified transport work.
-3. Preserve root/protected partitions; keep all dumps/backups/logs local.
+1. Boot23 long run (image READY and SHA-verified f6f23b46…; sampler removed, ufswait=1
+   kept): watch for exec backboardd, SpringBoard load completion vs crash loop, panic.
+   Zero frames is expected (GPU-only rendering); do not treat it as failure.
+2. Log transport (agreed priority): re-enable sweet_log_start for socrates behind the
+   0189 gate (userdata tail 1025x4KiB, outside the 16GiB HFS root — verify nonoverlap),
+   fix tools/sweet-log-pull.sh stat portability, verify recovery/root-ADB extraction.
+   This is prerequisite infrastructure for M7 debugging (GPU bring-up needs real logs,
+   not photos).
+3. Start M7 (the UI gate): default-off read-only a740/GMU/SMMU probe patch, modeled on
+   the EPSS probe plan; extract GMU firmware from the live K60 into research/ (gitignored).
+4. Then SMP/cpufreq speedups, each as its own milestone with mkadt /cpus data fixed first.
+5. Preserve root/protected partitions; keep all dumps/backups/logs local.
