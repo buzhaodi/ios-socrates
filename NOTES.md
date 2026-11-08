@@ -182,6 +182,28 @@
 - Read-only baseline-root launchd audit: backboardd and SpringBoard jobs exist,
   KeepAlive/RunAtLoad true; disabled overrides only bluetoothd/fairplayd.H2.
   Their startup definitions were not omitted by baseline-root preparation.
+- Boot21 panel series now proves loader PROGRESS: SpringBoard27, slide
+  0x4a474000, sample5 faults53/pageins9,user0.003993s/sys1.120364s;
+  sample6 faults199/pageins155,user0.004351s/sys15.881417s;
+  sample7 faults364/pageins320,user0.005544s/sys30.635223s.
+  PC/LR remains0x1eea87d08 (unslid0x1a4613d08,dyld forEachSection+52),
+  but saved x20 changes (sample5 0x1ebe38000,sample6 0x1d66f1f00),so this
+  is not evidence of one fixed-address read spinning. Significant kernel time
+  accompanies pageins; UFS polling/VM work are candidates, not proven cause.
+  Sample6 free3750 and sample7 free2717 pages; wanted/privileged0,zero UI
+  frames,no shown panic. Backboardd/configd still not sampled in watched set.
+- Prepared boot22 A/B using SAME kernel21/CI42431906400 and unchanged ADT/shim.
+  Only cmdline adds ufswait=1 (existing0069 driver option: spin50us then timed
+  sleep200us when su.ready,IRQs enabled,not interrupt context,preemption0).
+  This tests CPU busy-poll cost,not a proven repair or promise of UI.
+  Kernel/ADT/segments byte-identical to21 outside cmdline; packed10 segments
+  and args verified. No kernel source change,new CI or root reflash needed.
+- Boot22 READY NOT BOOTED: shim/out-mac/xnu-ios-diag22-boot.img SHA256
+  4cbf43230e9ea2a60b3bc71764dd2524d6e1d1619f0385582fb90824b6aebb48.
+  Local boot22-manifest.json and pack-boot22.py retained under ignored research.
+  NEXT: when user enters FASTBOOT,test22 temporarily; compare per-sample CPU
+  sys/pagein deltas and boot progress. Do not claim sleeping branch executed
+  merely because option is present; infer carefully from outcome/wait context.
 - Executed command: fastboot flash -S 512M userdata research/ios-root/ios16-root.simg.
   Preserve GPT, bootloaders, recovery, modem, persist and LOCAL backups.
   Confirmation for this completed userdata installation is already recorded;
