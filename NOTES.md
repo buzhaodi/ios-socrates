@@ -2,6 +2,23 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — confirmed Mac connection; reset/test-point research
+
+- User confirms battery reconnected AND USB data cable connected. Fresh ioreg IOUSB
+  snapshot still contains only two host controllers, no phone device. No reset/flash done.
+- No verified K60 Pro dedicated reset pad or EDL pin coordinates established. ROMadd
+  lists a K60 Pro EDL test-point file (id5094), but download redirects to login; contents
+  not inspected. DZKJ lists K60 Pro schematic/layout (id14647/14648); direct opens failed
+  HTTP502. These are leads, not board-level verification or shorting instructions.
+- Reject generic mixed-model web instructions (K60/K60E/Note10 mixed on one page).
+  Next: obtain actual board-matched schematic/test-point diagram and clear device photo
+  for correlation, or technician power/connector checks and verified EDL entry. Photograph
+  only accessible board; do not remove shields or short arbitrary pads for identification.
+- Sources: https://romadd.org/index.php?a=downloads&b=file&id=5094 ;
+  https://www.dzkj16888.com/index.php?c=read&id=14647&page=1 ;
+  https://www.dzkj16888.com/index.php?c=read&desc=0&id=14648&page=1 .
+- Documentation only; no CI run/device mutation. Recovery unresolved.
+
 ### 2026-11-08 — host USB snapshot after user says power connected
 
 - User says power is connected; whether this means battery, wall charger or Mac USB
