@@ -2,6 +2,15 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — host USB snapshot after user says power connected
+
+- User says power is connected; whether this means battery, wall charger or Mac USB
+  is ambiguous and needs clarification. Read-only host check: system_profiler
+  SPUSBDataType returned empty; ioreg IOUSB showed only two host controllers, no
+  attached device nodes. No phone/9008 observed at this instant, not a continuous
+  capture or proof of absent enumeration with a confirmed Mac data connection.
+- No device mutation or CI run. Next: confirm phone USB data connection to this Mac.
+
 ### 2026-11-08 — battery reconnect attempt: still no visible response
 
 - USER REPORT after physical battery disconnect/reconnect advice: no vibration or

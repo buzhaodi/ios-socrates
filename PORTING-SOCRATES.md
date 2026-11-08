@@ -1415,3 +1415,12 @@ Where this leaves the log-transport work:
   voltage/current and board-specific EDL entry. No verified socrates test-point pinout.
 - No device writes, commands, build or CI run. Recovery remains unresolved; neither
   exact ABL parser failure nor physical board damage is established.
+
+### 2026-11-08 — host USB snapshot after user says power connected
+
+- User says power is connected; whether this means battery, wall charger or Mac USB
+  is ambiguous and needs clarification. Read-only host check: system_profiler
+  SPUSBDataType returned empty; ioreg IOUSB showed only two host controllers, no
+  attached device nodes. No phone/9008 observed at this instant, not a continuous
+  capture or proof of absent enumeration with a confirmed Mac data connection.
+- No device mutation or CI run. Next: confirm phone USB data connection to this Mac.
