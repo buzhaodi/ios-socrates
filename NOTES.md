@@ -2,6 +2,19 @@
 
 ## Agent handoff / active work
 
+### 2026-11-08 — battery reconnect attempt: still no visible response
+
+- USER REPORT after physical battery disconnect/reconnect advice: no vibration or
+  illumination. Physical reset did not restore visible startup. Actual disconnected
+  duration and connector seating are not independently verified.
+- USB enumeration AFTER this reconnect has not yet been reported or checked in this
+  turn; do not conflate the earlier no-USB observation with a fresh check. A dark panel
+  alone cannot distinguish EDL from no power. Next: verify USB detection with battery
+  connected and board clear of tools; if absent, technician checks battery connector,
+  voltage/current and board-specific EDL entry. No verified socrates test-point pinout.
+- No device writes, commands, build or CI run. Recovery remains unresolved; neither
+  exact ABL parser failure nor physical board damage is established.
+
 ### 2026-11-08 — user physically disconnected battery
 
 - USER REPORT: phone opened and battery disconnected; reconnect/boot result pending.
