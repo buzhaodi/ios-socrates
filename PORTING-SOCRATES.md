@@ -1454,3 +1454,21 @@ Where this leaves the log-transport work:
 - No K60 Pro shorting instructions can be inferred from this video. Await clear photo
   of user's accessible board/board markings and matching authoritative circuit evidence.
   No device command/write or CI run. Recovery unresolved.
+
+### 2026-11-08 — additional test-point search after user board photo
+
+- User supplied a clear opened-phone photo and requests exact shorting location. Photo
+  alone has not established EDL pad/net identities; no candidate marked or short authorized.
+- Additional Chinese/English text and image searches did NOT yield a verified public
+  K60 Pro EDL pinout. Image results included unrelated models; do not reuse them.
+- New primary-source lead: ZXW vendor support list and update history explicitly list
+  K60 Pro board 13510M11M0A01, distinct from K60 1351M11AM0B01. Actual device board
+  revision still needs correlation; public list is not the schematic/net definition.
+  https://www.zxwtools.com/articleinfo_57.html
+  https://www.zxwtools.com/ArticleInfo_108.html
+- DominikCell lists schematic/location PDFs but viewing requires its desktop application;
+  BoarDray says sign-in is required to view drawings. ROMadd id5094 remains login-gated.
+  No account created, software installed, payment, device command, or CI run.
+- NEXT: obtain K60 Pro EDL diagram or corresponding schematic AND placement view from
+  a licensed repair drawing source/technician. Do not give guessed shorting coordinates.
+  Recovery remains unresolved; public catalog discovery is not a hardware milestone.
