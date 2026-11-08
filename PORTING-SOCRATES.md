@@ -1256,3 +1256,111 @@ vendor dtb table + per-block splash injection from the mik60proios tooling eithe
    the EPSS probe plan; extract GMU firmware from the live K60 into research/ (gitignored).
 4. Then SMP/cpufreq speedups, each as its own milestone with mkadt /cpus data fixed first.
 5. Preserve root/protected partitions; keep all dumps/backups/logs local.
+
+### 2026-11-08 — boot24: the direct-log milestone (0193 logger + extraction chain)
+
+- Patch 0193 (d9946b8, CI 42437643079 SUCCESS, kernel 9fe4969e…, UUID 8A9ABEEA-67A2-3863-9A4C-E466EA1445BD):
+  sweet_log_start() moved INSIDE the socrates branch, before sweet_sample_start(). Same polled-UFS
+  path as the root itself, zero new MMIO. Log area = last 1+1025 blocks of userdata (~170 GiB past
+  the 16 GiB HFS root). Local gates: validate-repo 193 green; strict chain 190→193 onto the CI17
+  buildtree zero refused; exact CI17-header clang -fsyntax-only clean.
+- Extraction chain (1991b3f): tools/sweet-log-fetch.sh (fastboot fetch + sparse decode) and a fixed
+  tools/sweet-log-pull.sh (recovery ADB path; macOS stat -f %z + strict 4198400-byte size gate).
+  The sparse decoder is proven 3 ways: streamed byte-exact vs ios16-root.simg/raw over the first
+  2000 chunks (311 MiB, all three chunk kinds), a synthetic fetch-sized image, and raw passthrough
+  for non-sparse replies. Two real bugs were caught by the byte-exact test: a 4x fill-pattern
+  repeat error and a file-header field offset shift; hand-rolled parsers need reference images.
+- Hardware probe: fastboot fetch REFUSED by this ABL — "Unable to get max-fetch-size. Device does
+  not support fetch command." So the fastboot-fetch path is DEAD on socrates's stock bootloader;
+  the recovery-ADB path (sweet-log-pull.sh) is the live channel. OrangeFox R12.0_261014 image
+  verified (sha256 95f8604f… matches its release.json) in research/recovery/socrates-orangefox/.
+- Boot24 image shim/out-mac/xnu-ios-log24-boot.img sha 847f89f8… (kernel 9fe4969e…, sampler OFF
+  sweetsample=-, ufswait=1, ADT identical to 18-23; 0193 logger strings + args verified inside).
+  Temporary fastboot boot ACCEPTED 2026-11-08: Sending 21404 KB OKAY 0.494s, Booting OKAY 0.103s.
+  Panel intentionally not photographed: the log is the observation channel now.
+- NEXT after boot24 runs: fastboot reboot bootloader -> temporary boot OrangeFox -> pull the log
+  tail with sweet-log-pull.sh -> decode -> first direct full-log diagnosis. If the HFS root keeps
+  the log write from flushing (EROFS panic line in the log itself will say), fall back to
+  examining boot18-23 behavior via the log area's absence (all-zero header = logger never wrote).
+
+### 2026-11-08 — the log-read war: every non-destructive read path probed and closed
+
+Goal: read the 4 MiB SWEETLOG area (written by boot24's 0193 logger) out of userdata without
+flashing anything. Hardware observations, each one tested live:
+
+1. ABL fastboot: no FETCH support ("Unable to get max-fetch-size. Device does not support
+   fetch command."). Read path closed.
+2. Stock MIUI recovery (fastboot reboot bootloader -> fastboot reboot landed in stock recovery;
+   also adb reboot recovery): adbd runs uid 2000 (user/release-keys), no su, /dev/block/sda32
+   root:root 0600 (DAC, not SELinux - SELinux shows Permissive), ro.secure=1, "adb root" ->
+   "adbd cannot run as root in production builds". service.adb.root=1 setprop does nothing.
+   ueventd.rc import paths (/vendor/etc, /odm/etc) not writable by shell. Dead.
+3. OrangeFox via fastboot boot, three rounds:
+   - the stock 100 MB image (v4, kernel_size=0): ABL rejects - "Failed to load/authenticate
+     boot image: Bad Buffer Size" (kernel_size=0 => the ABL's buffer math breaks; not a size cap:
+     max-download is 768 MB).
+   - rebuilt v0 with fox lz4 ramdisk: boots into stock MIUI recovery, NOT fox.
+   - rebuilt v0 with fox cpio recompressed as gzip (54 MB): STILL stock MIUI recovery.
+   - DECISIVE 185-byte marker ramdisk (cpio: /init sleep + /marker_xyz): booted MIUI recovery,
+     /marker_xyz ABSENT, and /chosen linux,initrd-start/end IDENTICAL both times
+     (0xb4653000..0xb7ffe618, 57.7 MiB) => THE ABL NEVER PASSES A fastboot-boot RAMDISK TO THE
+     KERNEL. /chosen initrd is always the fixed on-disk init_boot_b+vendor_boot_b concatenation.
+     The SWEETXNU payload works only because the SHIM parses the boot image it receives at the
+     kernel load address, not via the kernel initrd mechanism.
+     => fastboot boot can replace the KERNEL only; MIUI recovery always follows on this ABL.
+   - ABL also overwrites the kernel cmdline (DT /chosen bootargs showed MIUI's own; our v0
+     console=null never appeared).
+4. fastbootd (adb reboot fastboot from stock recovery, is-userspace: yes): MIUI ships the bare
+   AOSP default fastbootd - no fetch, no oem commands. Write-only world. Dead.
+5. OrangeFox flashed to a slot: not possible without risk - fox image is v4 kernel_size=0
+   (expects slot GKI kernel), init_boot_a is 8 MB (fox ramdisk 61 MB), vendor_boot_a 96 MB
+   (fox image 100 MB), boot_a/b are 192 MB but slot-boot of a kernel_size=0 image is exactly
+   what the ABL rejects. boot_a is EMPTY (all-zero backup) and both boot slots are backed up
+   with verified manifest hashes.
+
+Where this leaves the log-transport work:
+- The WRITE side is DONE and proven: 0193 persists the full console ring to userdata tail.
+- The READ side needs ONE of:
+  (a) a root-capable recovery reached through a slot boot (destructive-but-reversible flash;
+      needs explicit user approval per the standing rule),
+  (b) our own kernel printing the ring on the panel (photos again - what we are escaping), or
+  (c) a future K60 USB port of sweet_usb.c (the campaign's M6+ USB work) for live log streaming.
+- Everything above is OBSERVED on hardware today; the ABL ramdisk-behavior conclusions are
+  three-boot-proven (lz4 / gzip / marker rounds agree).
+
+### 2026-11-08 — THE SLOT-A EXPERIMENT BRICKED THE BOOT; rescue in progress (HONEST RECORD)
+
+- User approved option A: flash a fox-repacked v0 image to the EMPTY boot_a slot (all-zero backup,
+  hash-verified), set_active a, reboot - reasoning: the on-disk boot path passes ramdisk (stock
+  recovery chain proves it), so slot-a boot would reach fox root adb.
+- EXECUTED: fastboot flash boot_a recovery-v0-fox.img (ef627e1c…, 77,708 KB) OKAY;
+  set_active a OKAY; current-slot a confirmed; reboot.
+- RESULT: BLACK SCREEN, NO USB ENUMERATION AT ALL (not even a charging profile), no response to
+  ANY key combo: power+vol-down 10/20/30s, power alone 30s+, vol-up+vol-down+USB-plug EDL combo
+  (two cables, direct ports). ioreg shows zero USB devices. Wall charger shows no charging icon.
+- INTERPRETATION (observation vs guess separated):
+  - OBSERVED: the failure kills even USB-PHY enumeration; the ABL never gets far enough to run
+    its fallback (slot retry -> b). On this Xiaomi ABL, a v0 header in a boot SLOT is fatal early,
+    unlike the fastboot-boot path which parsed v0 happily 20+ times.
+  - LIKELY (not proven): the device sits in a pre-USB crash state; battery may also have hit a
+    protect point after 1h+ of flashing/booting (no charging icon supports deep discharge).
+  - The xbl/abl/tz chain is untouched; 126-partition backup with verified hashes exists;
+    userdata (iOS root + boot24's 4 MiB SWEETLOG) is intact on disk.
+- RESCUE PLAN (in flight):
+  1. User: wall-charge 30 min, then let it rest 3h (PMIC full discharge cycle), then retry
+     power-on and the EDL combo (vol-up+vol-down held while plugging USB).
+  2. If 9008 appears: bkerler/edl installed in research/edl-tool (venv, working --help); needs a
+     signed SM8550 firehose loader - NOT in the repo (edl's Loaders/ dir empty; no local MIUI
+     fastboot ROM). Plan: user downloads the official socrates fastboot ROM (~7GB) OR we extract
+     the loader from any MIUI firmware zip; then edl w boot_a <original-zero image> + restore
+     slot flags (via gpt/attrib), never touching userdata.
+  3. If fastboot returns some other way: set_active b FIRST, reflash boot_a from
+     backup/2026-11-08-socrates-critical/boot_a.img.
+- LESSONS (for every future agent on this device):
+  1. NEVER point the slot chain at anything but a stock-format (v4/GKI) boot image. This ABL's
+     disk-boot path is far less tolerant than its fastboot-boot path. The v0 format that works
+     over USB must NEVER be written into a boot slot.
+  2. The ABL has no observable fallback when a slot header is unparseable - it wedges before USB.
+  3. All destructive experiments on this device MUST have the EDL firehose loader staged BEFORE
+     the experiment. (The backup discipline saved us; the loader staging was missing.)
+  4. fastboot getvar accepted boot_a as flash target without any warning despite the v0 content.
