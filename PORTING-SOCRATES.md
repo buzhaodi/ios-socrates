@@ -1472,3 +1472,37 @@ Where this leaves the log-transport work:
 - NEXT: obtain K60 Pro EDL diagram or corresponding schematic AND placement view from
   a licensed repair drawing source/technician. Do not give guessed shorting coordinates.
   Recovery remains unresolved; public catalog discovery is not a hardware milestone.
+
+### 2026-11-10 — rescue progress: EDL cable acquired, official ROM staged, loader identified
+
+- User acquired a 9008 engineering cable (enumerates its GenesysLogic hub on the Mac side;
+  phone end no 9008 yet - the power-edge attempt with battery disconnected still pending
+  confirmation of cable switch position / re-plug to force the rising edge).
+- Official socrates fastboot ROM staged locally: backup/socrates_images_OS3.0.304.0.WMKCNXM_
+  20260713.0000.00_16.0_cn_cdb5f7269f.tgz (8.48 GB, 107 files) - abl.elf/xbl_config.elf/
+  devcfg.mbn and full images present; NO firehose loader inside (Xiaomi never ships it).
+- Firehose loader IDENTIFIED with exact fingerprint (from the shangdi178/xiaomi-9008-recovery
+  K70 SM8550 rescue playbook, MIT-licensed docs):
+    name  : 小米骁龙8Gen2免授权9008引导文件(东芝铠侠存储切勿使用否则会被格机).melf
+    size  : 1,641,376 bytes
+    sha256: 4cf4570503c186054ca6683fa075f79c6b5b7534c660e5cd4472fac370125de5
+  socrates IS SM8550/8Gen2 - same loader family. Circulates via Chinese repair sellers
+  (taobao/pdd: '骁龙8Gen2 9008引导文件') or ROMadd's socrates EDL product.
+- SAFETY GATES before any EDL write (from the same playbook, treat as hard rules):
+  1. Verify loader sha256 == 4cf45705… before use.
+  2. Read UFS VENDOR ID first (fh_loader --getstorageinfo / edl): 0x1AD SK Hynix OK,
+     0x198 Kioxia FORBIDDEN with this loader (the filename's warning is real - vendor
+     mismatch bricks by formatting), 0x1CE Micron, 0x1EC Samsung.
+  3. NEVER write persist/modemst1/modemst2/fsg/fsc (device-unique calibration/IMEI).
+  4. Write plan remains: boot_a (original all-zero backup) + devinfo + misc only, read-back
+     verify, reset. userdata untouched (iOS root + boot24's 4MiB SWEETLOG preserved).
+- bkerler/edl installed at research/edl-tool (venv) and accepts .melf firehose programmers.
+
+### Next concrete actions
+1. User obtains the fingerprinted loader (taobao/ROMadd); we verify sha256 before anything.
+2. Force 9008: battery disconnected + cable re-plug into phone to create the power rising
+   edge (confirm cable switch is in 9008 position); vol-up+vol-down held while plugging as
+   the fallback.
+3. On 9008: edl (bkerler) --loader <verified.melf>: read storage info (vendor gate), printgpt
+   (structure gate), then write boot_a/devinfo/misc from the verified backup, read back,
+   hash-compare, reset. Then reassemble battery, boot to fastboot, verify slot b chain.
